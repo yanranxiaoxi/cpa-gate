@@ -1,0 +1,623 @@
+/* ===== 主题变量 ===== */
+:root {
+	--radius: 12px;
+	--radius-sm: 8px;
+	--gap: 12px;
+	--font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+	--mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+:root,
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #f5f6f8;
+	--card: #ffffff;
+	--card-soft: #fafbfc;
+	--text: #1f2328;
+	--text-dim: #667085;
+	--border: #e2e5ea;
+	--accent: #2563eb;
+	--accent-text: #ffffff;
+	--accent-soft: #eff4ff;
+	--danger: #d92d20;
+	--shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 8px 24px rgba(16, 24, 40, 0.06);
+	/* 下拉框箭头（颜色同 --text-dim，随主题切换） */
+	--select-arrow: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%20fill='none'%20stroke='%23667085'%20stroke-width='1.75'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%206l4%204%204-4'/%3E%3C/svg%3E");
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--bg: #12151b;
+	--card: #1b1f27;
+	--card-soft: #171b22;
+	--text: #e7e9ee;
+	--text-dim: #9aa3b2;
+	--border: #2b313c;
+	--accent: #5b8def;
+	--accent-text: #ffffff;
+	--accent-soft: #1d2b4a;
+	--danger: #f97066;
+	--shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+	--select-arrow: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%20fill='none'%20stroke='%239aa3b2'%20stroke-width='1.75'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M4%206l4%204%204-4'/%3E%3C/svg%3E");
+}
+
+/* ===== 基础 ===== */
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	font-family: var(--font);
+	background: var(--bg);
+	color: var(--text);
+	line-height: 1.5;
+	min-height: 100dvh;
+	display: flex;
+	flex-direction: column;
+	transition: background 0.2s ease, color 0.2s ease;
+}
+
+button {
+	font: inherit;
+	cursor: pointer;
+}
+
+a {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+code,
+pre,
+.mono {
+	font-family: var(--mono);
+}
+
+.hidden {
+	display: none !important;
+}
+
+.container {
+	width: 100%;
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 0 16px;
+}
+
+/* ===== 顶部栏 ===== */
+.topbar {
+	background: var(--card);
+	border-bottom: 1px solid var(--border);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.topbar-inner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 56px;
+	flex-wrap: wrap;
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+
+.brand {
+	font-weight: 700;
+	font-size: 1.1rem;
+	color: var(--text);
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.brand:hover {
+	text-decoration: none;
+}
+
+.brand::before {
+	content: '';
+	width: 26px;
+	height: 26px;
+	border-radius: 7px;
+	background: linear-gradient(135deg, var(--accent), #7c3aed);
+	display: inline-block;
+	align-self: center;
+}
+
+.brand-sub {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: var(--text-dim);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.topbar-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.user-area {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 34px;
+}
+
+.user-chip {
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: var(--text);
+	background: var(--accent-soft);
+	border-radius: 999px;
+	padding: 4px 12px;
+	max-width: 180px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 用户名可跳转用户中心（服务端配置了 OIDC_ACCOUNT_URL）时给出可点击的提示 */
+.user-chip-link:hover {
+	text-decoration: underline;
+}
+
+.user-chip-link:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* ===== 按钮 / 控件 ===== */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	padding: 7px 14px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--text);
+	background: var(--card);
+	transition: filter 0.15s ease, background 0.15s ease;
+	white-space: nowrap;
+}
+
+.btn:hover {
+	filter: brightness(1.06);
+	text-decoration: none;
+}
+
+.btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.btn.primary {
+	background: var(--accent);
+	color: var(--accent-text);
+}
+
+.btn.ghost {
+	background: transparent;
+	border-color: var(--border);
+	color: var(--text);
+}
+
+.btn.small {
+	padding: 4px 10px;
+	font-size: 0.82rem;
+}
+
+.icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--text);
+	font-size: 1rem;
+}
+
+.icon-btn:hover {
+	background: var(--accent-soft);
+}
+
+.select {
+	font: inherit;
+	color: var(--text);
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: 6px 10px;
+	max-width: 100%;
+	/*
+	 * 自定义下拉箭头：原生箭头紧贴右内边距且间距不可调，改为背景图后
+	 * 用 right 10px 让箭头右边距与文字左边距（padding-left）保持一致。
+	 */
+	appearance: none;
+	background-image: var(--select-arrow);
+	background-repeat: no-repeat;
+	background-position: right 10px center;
+	background-size: 14px 14px;
+	/* 右侧留出箭头宽度 + 间距，避免文字与箭头重叠 */
+	padding-right: 30px;
+}
+
+.lang-select {
+	min-width: 110px;
+}
+
+/* ===== 主区域 ===== */
+main.container {
+	flex: 1;
+	padding-top: 28px;
+	padding-bottom: 48px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.page-title {
+	font-size: 1.6rem;
+	margin: 4px 0 2px;
+}
+
+.page-tagline {
+	color: var(--text-dim);
+	margin: 0 0 20px;
+	text-align: center;
+}
+
+.card {
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+	width: 100%;
+	padding: 18px;
+}
+
+/* ===== 个人页面 ===== */
+.portal-wrap {
+	width: 100%;
+	max-width: 720px;
+}
+
+.portal-card {
+	padding: 6px 18px;
+}
+
+.portal-section {
+	padding: 16px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.portal-section:last-child {
+	border-bottom: none;
+}
+
+.portal-label {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: var(--text-dim);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	margin-bottom: 8px;
+}
+
+.portal-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.portal-value {
+	flex: 1 1 280px;
+	min-width: 0;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: 8px 10px;
+	font-size: 0.85rem;
+	overflow-wrap: anywhere;
+}
+
+.model-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.model-chip {
+	background: var(--accent-soft);
+	color: var(--text);
+	border-radius: 999px;
+	padding: 4px 10px;
+	font-size: 0.8rem;
+}
+
+/*
+ * 提示态（未登录 / 未配置 / 失去资格 / 加载失败）：没有 .portal-section 撑开
+ * 上下留白，改用四边等距的内边距，否则上下会明显窄于左右、按钮贴住下边沿。
+ */
+.portal-card.notice-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 14px;
+	padding: 32px 24px;
+	text-align: center;
+}
+
+.notice-title {
+	margin: 0;
+	font-size: 1.1rem;
+}
+
+.notice-text {
+	margin: 0;
+	max-width: 46ch;
+}
+
+/* 用户 ID 展示块（登录被拒 / 失去资格）：供用户复制后交给管理员 */
+.user-id-block {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	max-width: 100%;
+}
+
+.user-id-label {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--text-dim);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.user-id-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	max-width: 100%;
+}
+
+.user-id-value {
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: 6px 10px;
+	font-size: 0.82rem;
+	overflow-wrap: anywhere;
+}
+
+.user-id-hint {
+	margin: 0;
+	font-size: 0.8rem;
+	max-width: 46ch;
+}
+
+/* ===== 页脚 ===== */
+.footer {
+	padding: 18px 16px 32px;
+	color: var(--text-dim);
+	font-size: 0.82rem;
+	text-align: center;
+}
+
+.footer p {
+	margin: 0;
+}
+
+.footer a {
+	color: var(--text-dim);
+	text-decoration: none;
+	border-bottom: 1px dotted var(--border);
+	transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.footer a:hover {
+	color: var(--accent);
+	border-bottom-color: var(--accent);
+}
+
+.footer-meta {
+	margin-top: 6px !important;
+	font-size: 0.75rem;
+	opacity: 0.8;
+}
+
+/* ===== 登录弹窗 ===== */
+.modal-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(16, 24, 40, 0.45);
+	animation: modal-fade-in 0.15s ease;
+}
+
+.modal-dialog {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: min(92vw, 360px);
+	padding: 28px 24px;
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	box-shadow: var(--shadow);
+	animation: modal-pop-in 0.18s ease;
+}
+
+.modal-text {
+	margin: 0 0 4px;
+	text-align: center;
+	font-size: 0.95rem;
+	color: var(--text);
+}
+
+.modal-action {
+	width: 100%;
+	padding: 11px 18px;
+	font-size: 0.95rem;
+	white-space: normal;
+	text-align: center;
+}
+
+body.modal-open {
+	overflow: hidden;
+}
+
+@keyframes modal-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes modal-pop-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+
+/* ===== Toast ===== */
+.toast-box {
+	position: fixed;
+	bottom: 20px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	z-index: 100;
+	width: min(92vw, 460px);
+	pointer-events: none;
+}
+
+.toast {
+	background: var(--card);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	box-shadow: var(--shadow);
+	padding: 10px 16px;
+	font-size: 0.9rem;
+	max-width: 100%;
+	animation: toast-in 0.18s ease;
+}
+
+.toast-error {
+	border-left: 3px solid var(--danger);
+}
+
+.toast-success {
+	border-left: 3px solid #12b76a;
+}
+
+@keyframes toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 720px) {
+	.topbar-inner {
+		flex-direction: column;
+		align-items: stretch;
+		padding-top: 10px;
+		padding-bottom: 10px;
+	}
+
+	.topbar-actions {
+		justify-content: space-between;
+		flex-wrap: wrap;
+	}
+
+	.user-area {
+		margin-left: auto;
+	}
+
+	.portal-value {
+		flex-basis: 100%;
+	}
+}
+
+@media (max-width: 420px) {
+	.card {
+		padding: 14px;
+	}
+
+	.portal-card {
+		padding: 2px 14px;
+	}
+
+	.portal-card.notice-card {
+		padding: 28px 18px;
+	}
+}
+
+/*
+ * 小屏滚动时收起顶栏
+ *
+ * 由 `src/frontend/scroll-chrome.ts` 给顶栏加 `.chrome-hidden`；断点必须与该模块
+ * 导出的 MOBILE_QUERY 一致。
+ */
+@media (max-width: 720px) {
+	.topbar {
+		transition: transform 0.25s ease;
+	}
+
+	.topbar.chrome-hidden {
+		transform: translateY(-100%);
+	}
+}
+
+/* 用户要求减少动效时，收起/展开直接切换而不是滑出（避免前庭不适） */
+@media (prefers-reduced-motion: reduce) {
+	* {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}

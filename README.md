@@ -1,93 +1,208 @@
+[English](#) | [简体中文](./README.zh-Hans.md)
+
 # CPA Gate
 
+> [!WARNING]
+> This project was written through **Vibe Coding**. Although the code has been
+> reviewed by humans, it cannot be guaranteed to be 100% controlled or
+> bug-free. Use it at your own risk.
 
+A small, database-free entry point for [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI).
 
-## Getting started
+Users sign in with your existing SSO (OIDC, Keycloak friendly) and receive a personal CLIProxyAPI key. The page only shows what matters:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- the API endpoint
+- the personal token (with rotation)
+- the currently available models
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## How it works
 
-## Add your files
+- **No database.** CLIProxyAPI's own client key list (`/v0/management/api-keys`) is the single source of truth.
+- **Self-describing keys.** Every key is `<userId>.<random>`, so a key can be traced back to its user without a mapping table.
+- **SSO-gated issuance.** Before issuing a key, the service asks the Keycloak Admin API whether the user still exists, is enabled, and belongs to one of the configured groups.
+- **Revocation by scan.** A key-protected maintenance endpoint scans all managed keys and removes those whose user was deleted, disabled, or moved out of the allowed groups.
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+```mermaid
+flowchart LR
+    U[User] -->|OIDC login| G[CPA Gate]
+    G -->|Admin API| K[Keycloak]
+    G -->|Management API| C[CLIProxyAPI]
+    U -->|Token| C
+    O[Ops / cron] -->|POST /api/admin/keys/prune| G
 ```
-cd existing_repo
-git remote add origin https://gitlab.soraharu.com/XiaoXi/cpa-gate.git
-git branch -M main
-git push -uf origin main
+
+## Quick start
+
+Requirements: Node.js >= 20.19, pnpm >= 10.
+
+```bash
+pnpm install
+cp .env.example .env
+# edit .env
+pnpm dev
 ```
 
-## Integrate with your tools
+Production build:
 
-* [Set up project integrations](https://gitlab.soraharu.com/XiaoXi/cpa-gate/-/settings/integrations)
+```bash
+pnpm build
+node dist/index.js
+```
 
-## Collaborate with your team
+## Configuration
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Server
 
-## Test and Deploy
+| Variable | Default | Description |
+| --- | --- | --- |
+| `SERVER_HOST` | `0.0.0.0` | Listen address |
+| `SERVER_PORT` | `3001` | Listen port |
+| `ENV_PRODUCT` | `development` | `production` enables Secure cookies |
+| `SESSION_SECRET` | — | **Required.** HMAC key for session JWT (32+ random bytes) |
+| `SESSION_COOKIE_NAME` | `cpa_session` | Session cookie name |
+| `SESSION_TTL` | `604800` | Session lifetime (seconds) |
 
-Use the built-in continuous integration in GitLab.
+### CLIProxyAPI
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+| Variable | Default | Description |
+| --- | --- | --- |
+| `CPA_MANAGEMENT_URL` | — | **Required.** Management API base, without `/v0/management` |
+| `CPA_MANAGEMENT_KEY` | — | **Required.** CLIProxyAPI management key |
+| `CPA_API_BASE_URL` | management URL | Public API base shown to users; the page displays `${CPA_API_BASE_URL}/v1` |
+| `CPA_TIMEOUT_MS` | `10000` | Upstream timeout |
+| `MODELS_CACHE_TTL` | `60` | Model list cache in seconds (`0` disables) |
 
-***
+If CPA Gate is not on the same host as CLIProxyAPI, enable remote management in CLIProxyAPI:
 
-# Editing this README
+```yaml
+remote-management:
+  allow-remote: true
+  secret-key: <management-key>
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### OIDC
 
-## Suggestions for a good README
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OIDC_ISSUER` | — | e.g. `https://sso.example.com/realms/main` |
+| `OIDC_CLIENT_ID` | — | OIDC client ID |
+| `OIDC_CLIENT_SECRET` | — | OIDC client secret |
+| `OIDC_REDIRECT_URI` | — | e.g. `https://cpa-gate.example.com/api/auth/callback` |
+| `OIDC_SCOPE` | `openid profile email` | Requested scopes |
+| `OIDC_USERNAME_CLAIM` | `preferred_username` | Display name claim |
+| `OIDC_USER_ID_CLAIM` | `sub` | Claim used as the key prefix (must be the real Keycloak user ID) |
+| `OIDC_PROVIDER_NAME` | empty | Text on the login button |
+| `OIDC_ACCOUNT_URL` | empty | Optional user center link (http/https only) |
+| `OIDC_POST_LOGOUT_REDIRECT_URI` | site root | RP-initiated logout return URL |
+| `OIDC_ALLOW_INSECURE` | `false` | Allow `http://` issuers for local testing only |
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+> Keycloak clients must use the `public` subject type. With `pairwise`, `sub` is not the real user UUID and cannot be used with the Admin API.
 
-## Name
-Choose a self-explaining name for your project.
+### Keycloak Admin API
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ALLOWED_GROUPS` | — | Comma-separated or JSON array; group names (`ai`) or paths (`/staff/ai`) |
+| `ALLOWED_USERS` | — | Comma-separated or JSON array of specific users: UUID, username or email |
+| `KEYCLOAK_ADMIN_BASE_URL` | derived from issuer | e.g. `https://sso.example.com` |
+| `KEYCLOAK_REALM` | derived from issuer | e.g. `main` |
+| `KEYCLOAK_ADMIN_CLIENT_ID` | — | Service account client ID |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | — | Service account secret |
+| `KEYCLOAK_ADMIN_TIMEOUT_MS` | `10000` | Admin API timeout |
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+The service account needs the realm-management roles `view-users`, `query-groups`, and `view-groups`.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Group matching walks ancestor paths: a user in `/staff/ai/llm` matches `/staff/ai`. A user only in `/staff/ai` does **not** match `/staff/ai/llm`.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+`ALLOWED_GROUPS` and `ALLOWED_USERS` are combined with **OR** (union). At least one of them must be set when login is enabled.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+`ALLOWED_USERS` entries are matched case-insensitively against the user's UUID, username, and email. Use a `uuid:`, `username:`, or `email:` prefix to restrict an entry to one field:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```env
+ALLOWED_GROUPS=/staff/ai
+ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,username:guest-dev
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Tip: when a user is rejected, the page shows that user's own UUID with a copy button, so they can send it to you for allowlisting. The same ID is shown if a signed-in user loses access.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### Maintenance endpoint
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PRUNE_API_KEY` | empty | When empty, `POST /api/admin/keys/prune` returns 404 |
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+curl -X POST \
+  -H "X-Admin-Key: $PRUNE_API_KEY" \
+  "https://cpa-gate.example.com/api/admin/keys/prune"
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+# dry run
+curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
+  "https://cpa-gate.example.com/api/admin/keys/prune?dryRun=true"
+```
 
-## License
-For open source projects, say how it is licensed.
+Run it from cron frequently, for example every 10 minutes. Keys are only revoked by this scan; login checks only guard new issuance. Keycloak errors (timeout, 5xx, 401/403) make the scan **keep** keys and report them under `errors`.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+## API
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/config` | — | Public config (`callUrl`) |
+| `GET` | `/api/auth/status` | — | Session status |
+| `GET` | `/api/auth/login` | — | Redirect to the IdP |
+| `GET` | `/api/auth/callback` | — | OIDC callback |
+| `GET` | `/api/auth/logout` | — | Sign out; `?sso=1` also ends the IdP session |
+| `GET` | `/api/portal` | Session | Endpoint, token, models |
+| `POST` | `/api/token/rotate` | Session | Rotate the personal token |
+| `POST` | `/api/admin/keys/prune` | `PRUNE_API_KEY` | Remove keys of ineligible users |
+
+## Key format
+
+```text
+<userId>.<32-byte base64url>
+```
+
+Only keys matching `^([\w-]{1,128})\.([\w-]{43})$` are managed by this service. Anything else is left untouched by rotation and pruning.
+
+## Security notes
+
+- The management key and SSO secrets never reach the browser.
+- Tokens are only returned by authenticated, `no-store` responses and are masked in logs.
+- The maintenance endpoint uses constant-time comparison and returns 404 when unconfigured.
+- Login fails closed when Keycloak cannot be reached; pruning fails safe (keeps keys).
+- A user whose key was pruned cannot get it back by refreshing the page: `/api/portal` re-checks Keycloak before recreating a missing key.
+- A rejected login only displays the user's own UUID, stored in a short-lived signed cookie (5 minutes, cleared on a new login attempt or a successful sign-in), never in the URL.
+
+## Docker
+
+```bash
+pnpm build
+docker build -t cpa-gate .
+docker run -p 3001:3001 \
+  -e CPA_MANAGEMENT_KEY='…' \
+  -e OIDC_ISSUER='https://sso.example.com/realms/main' \
+  -e OIDC_CLIENT_ID='cpa-gate' \
+  -e OIDC_CLIENT_SECRET='…' \
+  -e OIDC_REDIRECT_URI='https://cpa-gate.example.com/api/auth/callback' \
+  -e ALLOWED_GROUPS='/staff/ai' \
+  -e KEYCLOAK_ADMIN_CLIENT_ID='cpa-gate-admin' \
+  -e KEYCLOAK_ADMIN_CLIENT_SECRET='…' \
+  -e SESSION_SECRET='…' \
+  -e PRUNE_API_KEY='…' \
+  cpa-gate
+```
+
+The image runs `pnpm install --prod` and copies `dist/` (backend + `public/`). `CPA_MANAGEMENT_URL` defaults to `http://127.0.0.1:8317`; override it when CLIProxyAPI runs in another container.
+
+## Development
+
+```bash
+pnpm dev        # backend + frontend watch
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+The UI, SSO flow, theme, i18n and build pipeline are shared with `LibreTranslate-FrontPage` and `pingatlas` so the three services look and behave the same.
+
+See [SPECS.md](./SPECS.md) for the full design document.
