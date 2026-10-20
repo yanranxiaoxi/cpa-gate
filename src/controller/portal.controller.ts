@@ -73,7 +73,9 @@ function callUrl(): string {
 class Portal extends Controller {
 	/** GET /api/config：前端公共配置 */
 	public async config(ctx: IContext) {
-		ctx.res.setHeader('Cache-Control', 'public, max-age=3600');
+		// 站点品牌、调用地址都随部署环境变化：必须回源校验，
+		// 否则换环境变量后浏览器仍会用旧缓存，看起来像「配置没生效」
+		ctx.res.setHeader('Cache-Control', 'no-cache');
 		sendJson(ctx.res, 200, {
 			callUrl: callUrl(),
 			endpoints: endpoints(),
