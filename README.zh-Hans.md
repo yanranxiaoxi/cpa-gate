@@ -12,7 +12,7 @@
 
 - 调用地址
 - 个人 Token（支持轮换）
-- 当前可用模型
+- 当前可用模型（点击模型名即可复制）
 
 ## 工作原理
 
@@ -61,13 +61,35 @@ node dist/index.js
 | `SESSION_COOKIE_NAME` | `cpa_session` | 会话 Cookie 名 |
 | `SESSION_TTL` | `604800` | 会话有效期（秒） |
 
+### 站点品牌
+
+六个可选变量，每种语言三个：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `SITE_TITLE_ZH_HANS` | `CPA Gate` | 浏览器标题、顶栏品牌名与页面主标题（简体中文） |
+| `SITE_SUBTITLE_ZH_HANS` | `CLIProxyAPI` | 顶栏品牌名右侧的小号副标题（简体中文） |
+| `SITE_DESCRIPTION_ZH_HANS` | 语言包 tagline | 页面副标题与 `<meta name="description">`（简体中文） |
+| `SITE_TITLE_EN` | `CPA Gate` | 同上，英文界面 |
+| `SITE_SUBTITLE_EN` | `CLIProxyAPI` | 同上，英文界面 |
+| `SITE_DESCRIPTION_EN` | 语言包 tagline | 同上，英文界面 |
+
+某一项留空时回退到该语言的默认文案，因此可以只覆盖需要的字段：
+
+```env
+SITE_TITLE_ZH_HANS=知行 AI 网关
+SITE_DESCRIPTION_ZH_HANS=登录后获取你的 CLIProxyAPI Token
+SITE_TITLE_EN=ZhiXing AI Gateway
+SITE_DESCRIPTION_EN=Sign in to get your CLIProxyAPI token
+```
+
 ### CLIProxyAPI
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `CPA_MANAGEMENT_URL` | — | **必填。** 管理 API 基址，不含 `/v0/management` |
 | `CPA_MANAGEMENT_KEY` | — | **必填。** CLIProxyAPI Management Key |
-| `CPA_API_BASE_URL` | 管理地址 | 展示给用户的调用基址，页面展示 `${CPA_API_BASE_URL}/v1` |
+| `CPA_API_BASE_URL` | 管理地址 | 展示给用户的调用基址，仅用于展示；模型查询始终走 `CPA_MANAGEMENT_URL` |
 | `CPA_TIMEOUT_MS` | `10000` | 上游超时（毫秒） |
 | `MODELS_CACHE_TTL` | `60` | 模型列表缓存秒数（`0` 表示不缓存） |
 
@@ -78,6 +100,18 @@ remote-management:
   allow-remote: true
   secret-key: <management-key>
 ```
+
+### 页面上展示的地址
+
+CLIProxyAPI 在同一端口上提供多套兼容协议，页面会把它们都列出来（每条都可点击复制）：
+
+| 客户端 | 需要设置的环境变量 | 默认展示的基址 | 打开「完整 URL」后展示的完整路径 |
+| --- | --- | --- | --- |
+| OpenAI SDK / Codex CLI（Chat Completions） | `OPENAI_BASE_URL` | `${CPA_API_BASE_URL}/v1` | `${CPA_API_BASE_URL}/v1/chat/completions` |
+| Claude Code | `ANTHROPIC_BASE_URL` | `${CPA_API_BASE_URL}` | `${CPA_API_BASE_URL}/v1/messages` |
+| Gemini CLI | `GOOGLE_GEMINI_BASE_URL` | `${CPA_API_BASE_URL}/v1beta` | `${CPA_API_BASE_URL}/v1beta/models/{model}:generateContent` |
+
+第一条是主「调用地址」，其余列在下方。该区块右上角的 **完整 URL** 开关（默认关闭）会把所有地址从「客户端环境变量该填的基址」切换为「可直接调用的完整接口路径」；选择保存在 `localStorage`，复制按钮始终复制当前显示的内容。Anthropic 那条**故意不带** `/v1`：Claude Code 自己会追加 `/v1/messages`，若填成 `/v1` 就会变成 `/v1/v1/messages`。
 
 ### OIDC
 
@@ -95,9 +129,81 @@ remote-management:
 | `OIDC_POST_LOGOUT_REDIRECT_URI` | 站点根 | RP-initiated logout 回跳地址 |
 | `OIDC_ALLOW_INSECURE` | `false` | 仅本地测试：允许 `http://` issuer |
 
-> Keycloak Client 必须使用 `public` Subject Type。若使用 `pairwise`，`sub` 不是真实用户 UUID，无法用于 Admin API 查询。
+### Keycloak 登录客户端
+
+登录客户端与下方管理客户端是两个不同的 Client：
+
+1. **Clients → Create client**
+   - Client type：`OpenID Connect`
+   - Client ID：`cpa-gate`（即 `OIDC_CLIENT_ID`）
+2. **Capability config**
+   - Client authentication：**On**（机密客户端，Secret 在 Credentials 页复制为 `OIDC_CLIENT_SECRET`）
+   - Standard flow：**On**（授权码 + PKCE S256）
+   - Implicit flow / Direct access grants / Service accounts roles：全部 **Off**
+3. **Settings → Valid redirect URIs** —— 必须与 `OIDC_REDIRECT_URI` **完全一致**：
+
+   ```
+   https://cpa-gate.example.com/api/auth/callback
+   ```
+
+   本地开发可再加一条：`http://localhost:3001/api/auth/callback`。
+4. **Settings → Valid post logout redirect URIs** —— RP-initiated logout 的回跳地址，即站点根：
+
+   ```
+   https://cpa-gate.example.com/
+   ```
+
+   「同时退出 SSO」按钮会回到这里；未显式配置 `OIDC_POST_LOGOUT_REDIRECT_URI` 时，服务自动取 `OIDC_REDIRECT_URI` 的站点根。
+5. **Settings → Advanced → Subject Type**：`public`。若为 `pairwise`，`sub` 是每个客户端不同的匿名标识，既不能作为 Key 前缀，也无法用于 Admin API 查询。
+6. **Web origins**：留空即可（所有请求都经本服务同源转发）。
+
+对应关系：
+
+| Keycloak 字段 | 值 |
+| --- | --- |
+| Valid redirect URI | `${OIDC_PUBLIC_ORIGIN}/api/auth/callback` |
+| Valid post logout redirect URI | `${OIDC_PUBLIC_ORIGIN}/` |
+
+如果 CPA Gate 挂在带路径前缀的反向代理后（如 `https://example.com/cpa-gate/`），回调应为 `https://example.com/cpa-gate/api/auth/callback`，且代理必须原样转发该路径。
 
 ### Keycloak Admin API
+
+> `KEYCLOAK_ADMIN_CLIENT_ID` 与 `KEYCLOAK_ADMIN_CLIENT_SECRET` 从哪来？它们属于**另一个**专供 Admin REST 使用的机密客户端（confidential client），只需创建一次：
+
+1. **Clients → Create client**
+   - Client type：`OpenID Connect`
+   - Client ID：`cpa-gate-admin`（名字随意，它就是 `KEYCLOAK_ADMIN_CLIENT_ID`）
+2. **Capability config**
+   - Client authentication：**On**
+   - Authorization：Off
+   - Standard flow / Implicit flow / Direct access grants：全部 **Off**
+   - Service accounts roles：**On**
+3. **Save** 后打开 **Credentials** 标签页，复制 **Client secret** → `KEYCLOAK_ADMIN_CLIENT_SECRET`
+4. 打开 **Service accounts roles** 标签页 → **Assign role** → 按客户端 `realm-management` 筛选 → 勾选
+   - `view-users`（读取用户资料、启用状态、用户名与邮箱）
+   - `query-groups`（列出用户所属组）
+5. 用 curl 验证凭据：
+
+```bash
+curl -s -X POST \
+  "$OIDC_ORIGIN/realms/$REALM/protocol/openid-connect/token" \
+  -d grant_type=client_credentials \
+  -d client_id=cpa-gate-admin \
+  -d client_secret='…'
+```
+
+返回体里出现 `access_token` 说明凭据正确。再验证权限：
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$OIDC_ORIGIN/admin/realms/$REALM/users/$USER_UUID"
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$OIDC_ORIGIN/admin/realms/$REALM/users/$USER_UUID/groups"
+```
+
+两条都返回 `200` 才说明角色足够。这里的 `403` 正是导致服务拒绝登录（`?login=unavailable`）、清理时保留 Key 的原因。
+
+> 不要授予 `realm-admin`，也不要复用 `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`：登录客户端必须保持 public 且没有管理角色，管理客户端则不应开启任何浏览器流程。
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -109,7 +215,7 @@ remote-management:
 | `KEYCLOAK_ADMIN_CLIENT_SECRET` | — | 服务账号 Secret |
 | `KEYCLOAK_ADMIN_TIMEOUT_MS` | `10000` | Admin API 超时 |
 
-服务账号需要 Realm Management 角色：`view-users`、`query-groups`、`view-groups`。
+服务账号需要 `realm-management` 角色：`view-users`、`query-groups`。
 
 组匹配会沿祖先路径判断：属于 `/staff/ai/llm` 的用户命中 `/staff/ai`；只属于 `/staff/ai` 的用户**不**命中 `/staff/ai/llm`。
 

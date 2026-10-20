@@ -18,9 +18,53 @@ function requireUser(ctx: IContext): SessionUser | null {
 	return user;
 }
 
-/** 前端展示的调用基址 */
+/** 去掉空字段，避免前端把空串当作显式配置 */
+function compactSiteText(text: { title: string; subtitle: string; description: string }) {
+	return {
+		...(text.title ? { title: text.title } : {}),
+		...(text.subtitle ? { subtitle: text.subtitle } : {}),
+		...(text.description ? { description: text.description } : {}),
+	};
+}
+
+/**
+ * 各协议的调用地址
+ *
+ * CLIProxyAPI 在同一端口上暴露多套兼容接口，路径前缀各不相同：
+ * - OpenAI 兼容：`/v1`（chat/completions、responses、models）
+ * - Anthropic 兼容：站点根（Claude Code 自己追加 `/v1/messages`）
+ * - Gemini 兼容：`/v1beta`（Gemini CLI 自己追加 `/v1beta/models/...`）
+ *
+ * 因此 Anthropic 那一项不能再带 `/v1`，否则会变成 `/v1/v1/messages`。
+ *
+ * 每项同时给出：
+ * - `base`：客户端环境变量应填的值（页面默认展示）
+ * - `full`：一个可直接调用的完整接口地址（页面「完整 URL」开关打开后展示）
+ */
+function endpoints() {
+	const base = CONFIG.cpa.apiBaseUrl;
+	return {
+		/** OpenAI 兼容（OpenAI SDK / Codex CLI） */
+		openai: {
+			base: `${base}/v1`,
+			full: `${base}/v1/chat/completions`,
+		},
+		/** Anthropic 兼容（Claude Code 的 ANTHROPIC_BASE_URL） */
+		anthropic: {
+			base,
+			full: `${base}/v1/messages`,
+		},
+		/** Gemini 兼容（Gemini CLI 的 GOOGLE_GEMINI_BASE_URL） */
+		gemini: {
+			base: `${base}/v1beta`,
+			full: `${base}/v1beta/models/{model}:generateContent`,
+		},
+	};
+}
+
+/** 前端展示的主调用地址（OpenAI 兼容） */
 function callUrl(): string {
-	return `${CONFIG.cpa.apiBaseUrl}/v1`;
+	return endpoints().openai.base;
 }
 
 /**
@@ -30,7 +74,15 @@ class Portal extends Controller {
 	/** GET /api/config：前端公共配置 */
 	public async config(ctx: IContext) {
 		ctx.res.setHeader('Cache-Control', 'public, max-age=3600');
-		sendJson(ctx.res, 200, { callUrl: callUrl() });
+		sendJson(ctx.res, 200, {
+			callUrl: callUrl(),
+			endpoints: endpoints(),
+			// 每个语言只下发配置过的字段，未配置时前端回退到该语言的默认文案
+			site: {
+				'zh-Hans': compactSiteText(CONFIG.site.zhHans),
+				'en': compactSiteText(CONFIG.site.en),
+			},
+		});
 	}
 
 	/** GET /api/portal */
@@ -80,6 +132,7 @@ class Portal extends Controller {
 			// 返回用户自己的 ID，便于失去资格后向管理员核对
 			userId: user.sub,
 			callUrl: callUrl(),
+			endpoints: endpoints(),
 			token,
 			...(tokenError ? { tokenError } : {}),
 			models: models.models,

@@ -115,7 +115,8 @@ export async function listModels(token: string): Promise<{ models: string[]; una
 		return { models: modelsCache.models, unavailable: false };
 	}
 
-	const url = `${CONFIG.cpa.apiBaseUrl}/v1/models`;
+	// 始终走管理地址（服务端可达的内网地址），展示用的 CPA_API_BASE_URL 可能无法从本机回环访问
+	const url = `${CONFIG.cpa.managementUrl}/v1/models`;
 	for (let attempt = 0; attempt < 3; attempt++) {
 		try {
 			const res = await fetch(url, {

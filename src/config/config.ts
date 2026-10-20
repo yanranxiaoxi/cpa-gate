@@ -210,7 +210,7 @@ export const CONFIG = {
 		managementUrl,
 		/** Management Key，只存在于服务端 */
 		managementKey,
-		/** 前端展示与 /v1/models 使用的调用基址；未配置时与管理地址一致 */
+		/** 前端展示的调用基址；未配置时与管理地址一致。模型查询始终走管理地址 */
 		apiBaseUrl,
 		/** 上游请求超时（毫秒） */
 		timeoutMs: validateNumberEnvVar('CPA_TIMEOUT_MS', process.env.CPA_TIMEOUT_MS, 10000),
@@ -264,6 +264,20 @@ export const CONFIG = {
 		secret: validateEnvVar('SESSION_SECRET', process.env.SESSION_SECRET),
 		cookieName: validateOptionalEnvVar(process.env.SESSION_COOKIE_NAME, 'cpa_session'),
 		ttl: validateNumberEnvVar('SESSION_TTL', process.env.SESSION_TTL, 7 * 24 * 60 * 60),
+	},
+
+	/** 站点品牌（按语言分别配置，留空时使用该语言的默认文案） */
+	site: {
+		zhHans: {
+			title: validateOptionalEnvVar(process.env.SITE_TITLE_ZH_HANS).trim(),
+			subtitle: validateOptionalEnvVar(process.env.SITE_SUBTITLE_ZH_HANS).trim(),
+			description: validateOptionalEnvVar(process.env.SITE_DESCRIPTION_ZH_HANS).trim(),
+		},
+		en: {
+			title: validateOptionalEnvVar(process.env.SITE_TITLE_EN).trim(),
+			subtitle: validateOptionalEnvVar(process.env.SITE_SUBTITLE_EN).trim(),
+			description: validateOptionalEnvVar(process.env.SITE_DESCRIPTION_EN).trim(),
+		},
 	},
 
 	/** 静态资源目录：默认为空时自动解析（构建产物 dist/public 或源码 public） */

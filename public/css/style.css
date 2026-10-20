@@ -16,6 +16,7 @@
 	--text: #1f2328;
 	--text-dim: #667085;
 	--border: #e2e5ea;
+	--track: #eceff3;
 	--accent: #2563eb;
 	--accent-text: #ffffff;
 	--accent-soft: #eff4ff;
@@ -33,6 +34,7 @@
 	--text: #e7e9ee;
 	--text-dim: #9aa3b2;
 	--border: #2b313c;
+	--track: #262c36;
 	--accent: #5b8def;
 	--accent-text: #ffffff;
 	--accent-soft: #1d2b4a;
@@ -316,12 +318,95 @@ main.container {
 }
 
 .portal-label {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
 	font-size: 0.78rem;
 	font-weight: 600;
 	color: var(--text-dim);
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 	margin-bottom: 8px;
+}
+
+/* 标签右侧的额外控件（如「完整 URL」开关），靠右对齐 */
+.portal-label-extra {
+	margin-left: auto;
+}
+
+/* ===== 开关 ===== */
+.switch {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+	font-size: 0.72rem;
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--text-dim);
+	user-select: none;
+}
+
+.switch-input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.switch-track {
+	position: relative;
+	flex: 0 0 auto;
+	width: 28px;
+	height: 16px;
+	border-radius: 999px;
+	background: var(--track);
+	border: 1px solid var(--border);
+	transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.switch-track::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 1px;
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: var(--card);
+	box-shadow: 0 1px 2px rgba(16, 24, 40, 0.25);
+	transform: translateY(-50%);
+	transition: transform 0.15s ease;
+}
+
+.switch-input:checked + .switch-track {
+	background: var(--accent);
+	border-color: var(--accent);
+}
+
+.switch-input:checked + .switch-track::after {
+	transform: translate(12px, -50%);
+}
+
+.switch-input:focus-visible + .switch-track {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.switch:hover .switch-track {
+	border-color: var(--accent);
+}
+
+/* 标签右侧的协议/客户端环境变量提示 */
+.portal-hint {
+	font-size: 0.7rem;
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+	opacity: 0.75;
 }
 
 .portal-row {
@@ -339,6 +424,65 @@ main.container {
 	border-radius: var(--radius-sm);
 	padding: 8px 10px;
 	font-size: 0.85rem;
+	/* 超长地址自然折行，避免撑破卡片；不产生横向滚动 */
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ===== 兼容地址列表（调用地址下方） ===== */
+.endpoint-list {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px dashed var(--border);
+	/*
+	 * 用 grid 让每一行的「名称 / 地址 / 复制」三列共用同一套列宽：
+	 * 左侧标签宽度由最长的环境变量名决定，所有地址框的左边缘因此对齐。
+	 * .endpoint-item 改为 display: contents，把三个子元素直接放进网格。
+	 */
+	display: grid;
+	grid-template-columns: max-content minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px 10px;
+}
+
+.endpoint-list-label {
+	grid-column: 1 / -1;
+	font-size: 0.72rem;
+	font-weight: 600;
+	color: var(--text-dim);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.endpoint-item {
+	display: contents;
+}
+
+.endpoint-meta {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 132px;
+}
+
+.endpoint-name {
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+
+.endpoint-hint {
+	font-size: 0.7rem;
+	opacity: 0.75;
+}
+
+.endpoint-value {
+	min-width: 0;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: 5px 8px;
+	font-size: 0.78rem;
+	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
 
@@ -348,12 +492,26 @@ main.container {
 	gap: 8px;
 }
 
+/* 模型标签即复制按钮：点击复制模型名，悬停/聚焦时给出可交互提示 */
 .model-chip {
 	background: var(--accent-soft);
 	color: var(--text);
+	border: 1px solid transparent;
 	border-radius: 999px;
 	padding: 4px 10px;
 	font-size: 0.8rem;
+	cursor: pointer;
+	transition: border-color 0.15s ease, filter 0.15s ease;
+}
+
+.model-chip:hover {
+	border-color: var(--accent);
+	filter: brightness(1.04);
+}
+
+.model-chip:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 
 /*
@@ -581,6 +739,28 @@ body.modal-open {
 
 	.portal-value {
 		flex-basis: 100%;
+	}
+
+	/* 窄屏放不下三列，回到「标签在上、地址在下」的堆叠布局 */
+	.endpoint-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.endpoint-item {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.endpoint-meta {
+		flex-basis: 100%;
+	}
+
+	.endpoint-value {
+		flex: 1 1 100%;
 	}
 }
 

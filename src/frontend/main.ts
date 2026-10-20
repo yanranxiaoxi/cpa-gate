@@ -1,6 +1,7 @@
 import type { Theme } from './theme';
-import type { AuthStatus } from './types';
+import type { AuthStatus, SiteText } from './types';
 import * as api from './api';
+import { getSiteConfig, loadConfig } from './api';
 import { renderAuth } from './auth';
 import { getLang, initI18n, setLang, SUPPORTED_LANGS, t } from './i18n';
 import { load, renderDenied, renderGuest, renderPortalError } from './portal';
@@ -10,6 +11,26 @@ import { ApiError } from './types';
 import { el, textWithLinks, toast } from './ui';
 
 const ROOT_ID = 'app';
+
+/** 当前语言的服务端品牌文案（未配置时返回空对象） */
+function siteText(): SiteText {
+	return getSiteConfig().site?.[getLang()] ?? {};
+}
+
+/** 站点标题：当前语言的 SITE_TITLE_* 优先，否则用语言包默认文案 */
+function siteTitle(): string {
+	return siteText().title || t('appName');
+}
+
+/** 站点副标题：当前语言的 SITE_SUBTITLE_* 优先，否则用语言包默认文案 */
+function siteSubtitle(): string {
+	return siteText().subtitle || t('brandSub');
+}
+
+/** 站点描述：当前语言的 SITE_DESCRIPTION_* 优先，否则用语言包默认文案 */
+function siteDescription(): string {
+	return siteText().description || t('tagline');
+}
 
 /** 已应用到 `<html>` 的主题 */
 function currentTheme(): Theme {
@@ -26,8 +47,8 @@ function buildHeader(): HTMLElement {
 	const inner = el('div', { class: 'container topbar-inner' });
 
 	const brand = el('a', { class: 'brand', href: '/' }, [
-		el('span', { class: 'brand-name' }, [t('appName')]),
-		el('span', { class: 'brand-sub' }, ['CLIProxyAPI']),
+		el('span', { class: 'brand-name' }, [siteTitle()]),
+		el('span', { class: 'brand-sub' }, [siteSubtitle()]),
 	]);
 
 	const langSelect = el('select', { 'class': 'select lang-select', 'aria-label': t('language') });
@@ -58,8 +79,8 @@ function buildHeader(): HTMLElement {
 
 function buildMain(): HTMLElement {
 	const main = el('main', { class: 'container' });
-	const heading = el('h1', { class: 'page-title' }, [t('appName')]);
-	const tagline = el('p', { class: 'page-tagline' }, [t('tagline')]);
+	const heading = el('h1', { class: 'page-title' }, [siteTitle()]);
+	const tagline = el('p', { class: 'page-tagline' }, [siteDescription()]);
 	const portal = el('div', { class: 'portal-wrap', id: 'portal' });
 	main.append(heading, tagline, portal);
 	return main;
@@ -69,7 +90,7 @@ function buildFooter(): HTMLElement {
 	const footer = el('footer', { class: 'container footer' });
 	footer.append(
 		el('p', {}, textWithLinks(t('footerNote'))),
-		el('p', { class: 'footer-meta' }, ['CPA Gate · CLIProxyAPI']),
+		el('p', { class: 'footer-meta' }, [`${siteTitle()} · ${siteSubtitle()}`]),
 	);
 	return footer;
 }
@@ -115,9 +136,15 @@ async function main(): Promise<void> {
 
 	await initI18n();
 	initTheme();
+	await loadConfig();
 
 	document.documentElement.lang = getLang();
-	document.title = t('appName');
+	document.title = siteTitle();
+	// 描述同时用于页面副标题与搜索引擎摘要
+	const metaDescription = document.querySelector('meta[name="description"]');
+	if (metaDescription) {
+		metaDescription.setAttribute('content', siteDescription());
+	}
 
 	root.append(buildHeader(), buildMain(), buildFooter());
 

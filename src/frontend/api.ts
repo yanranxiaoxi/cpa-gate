@@ -1,6 +1,7 @@
-import type { AuthStatus, PortalData } from './types';
+import type { AppConfig, AuthStatus, PortalData } from './types';
 import { ApiError } from './types';
 
+let siteConfig: AppConfig = { callUrl: '' };
 let statusCache: AuthStatus = { loggedIn: false, authEnabled: false, user: null };
 type AuthListener = (status: AuthStatus) => void;
 const authListeners: AuthListener[] = [];
@@ -32,6 +33,26 @@ async function sameOriginJson<T>(path: string, init?: RequestInit): Promise<T> {
 		throw new ApiError(err?.error || `HTTP ${res.status}`, res.status);
 	}
 	return data as T;
+}
+
+/**
+ * 加载站点配置（调用地址与可选的品牌文案）
+ *
+ * 失败时保留空值，前端回退到语言包默认文案，不影响登录状态渲染。
+ */
+export async function loadConfig(): Promise<AppConfig> {
+	try {
+		siteConfig = await sameOriginJson<AppConfig>('/api/config');
+	}
+	catch {
+		// 使用默认文案
+	}
+	return siteConfig;
+}
+
+/** 读取已加载的站点配置 */
+export function getSiteConfig(): AppConfig {
+	return siteConfig;
 }
 
 /** 加载登录状态 */

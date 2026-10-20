@@ -10,6 +10,92 @@ export interface PortalHandlers {
 	onRotate: () => Promise<void>;
 }
 
+/** 「完整 URL」开关的 localStorage 键 */
+const FULL_URL_KEY = 'cpa-full-url';
+
+/**
+ * 是否展示完整接口地址
+ *
+ * 关闭（默认）：显示客户端环境变量该填的基址，如 `https://cpa.example.com/v1`
+ * 打开：显示可直接调用的完整接口地址，如 `https://cpa.example.com/v1/chat/completions`
+ */
+let showFullUrl = readFullUrlPreference();
+
+/** 安全读取开关偏好（隐私模式下 localStorage 可能抛错） */
+function readFullUrlPreference(): boolean {
+	try {
+		return localStorage.getItem(FULL_URL_KEY) === '1';
+	}
+	catch {
+		return false;
+	}
+}
+
+/** 持久化开关偏好 */
+function saveFullUrlPreference(value: boolean): void {
+	try {
+		localStorage.setItem(FULL_URL_KEY, value ? '1' : '0');
+	}
+	catch {
+		// 忽略
+	}
+}
+
+/** 按当前开关状态选择要显示的地址 */
+function currentUrl(base: string, full: string): string {
+	return showFullUrl ? full : base;
+}
+
+/**
+ * 生成一个可切换显示形态的 URL 元素
+ *
+ * `data-base` / `data-full` 同时保存两种形态，切换开关时只改文本、不重建 DOM；
+ * 复制按钮在点击时读取当前文本，因此复制的就是屏幕上看到的地址。
+ */
+function urlCode(base: string, full: string, className: string): HTMLElement {
+	return el('code', {
+		'class': `${className} mono url-value`,
+		'data-base': base,
+		'data-full': full,
+	}, [currentUrl(base, full)]);
+}
+
+/** 就地刷新所有 URL 元素的显示形态 */
+function applyFullUrl(): void {
+	for (const node of document.querySelectorAll<HTMLElement>('.url-value')) {
+		const { base, full } = node.dataset;
+		if (base && full) {
+			node.textContent = currentUrl(base, full);
+		}
+	}
+}
+
+/** 「完整 URL」开关 */
+function fullUrlSwitch(): HTMLElement {
+	const input = el('input', { class: 'switch-input', type: 'checkbox' }) as HTMLInputElement;
+	input.checked = showFullUrl;
+	input.addEventListener('change', () => {
+		showFullUrl = input.checked;
+		saveFullUrlPreference(showFullUrl);
+		applyFullUrl();
+	});
+	return el('label', { class: 'switch', title: t('fullUrlHint') }, [
+		input,
+		el('span', { class: 'switch-track' }),
+		el('span', { class: 'switch-text' }, [t('fullUrlToggle')]),
+	]);
+}
+
+/** 复制按钮：点击时读取目标元素当前文本，跟随开关状态 */
+function copyUrlButton(node: HTMLElement): HTMLButtonElement {
+	const button = el('button', { class: 'btn small ghost', type: 'button' }, [t('copy')]);
+	button.addEventListener('click', async () => {
+		const ok = await copyText(node.textContent ?? '');
+		toast(ok ? t('copied') : t('copyFailed'), ok ? 'success' : 'error');
+	});
+	return button;
+}
+
 /** 复制按钮：成功后 toast 提示 */
 function copyButton(value: string): HTMLButtonElement {
 	const button = el('button', { class: 'btn small ghost', type: 'button' }, [t('copy')]);
@@ -39,14 +125,84 @@ function userIdBlock(userId: string, username?: string): HTMLElement {
 	return wrapper;
 }
 
-/** 一项信息：标签 + 值 + 操作按钮 */
-function section(label: string, value: string, actions: HTMLButtonElement[], mono = true): HTMLElement {
+/**
+ * 模型标签：点击即复制模型名
+ *
+ * 用 button 而不是 span，键盘可聚焦、可回车触发；视觉上保持胶囊样式。
+ */
+function modelChip(model: string): HTMLButtonElement {
+	const chip = el('button', {
+		'class': 'model-chip mono',
+		'type': 'button',
+		'title': t('copyModel'),
+		'aria-label': t('copyModelAria', { name: model }),
+	}, [model]);
+	chip.addEventListener('click', async () => {
+		const ok = await copyText(model);
+		toast(ok ? t('copiedModel', { name: model }) : t('copyFailed'), ok ? 'success' : 'error');
+	});
+	return chip;
+}
+
+/** 一项兼容地址：协议名 + 用途 + 值 + 复制 */
+function endpointRow(label: string, hint: string, base: string, full: string): HTMLElement {
+	const row = el('div', { class: 'endpoint-item' });
+	const meta = el('div', { class: 'endpoint-meta' });
+	meta.append(
+		el('span', { class: 'endpoint-name' }, [label]),
+		el('span', { class: 'endpoint-hint dim mono' }, [hint]),
+	);
+	const code = urlCode(base, full, 'endpoint-value');
+	row.append(meta, code, copyUrlButton(code));
+	return row;
+}
+
+/** 一项信息：标签 + 值 + 操作按钮（可选协议提示与右侧控件） */
+function section(
+	label: string,
+	value: string,
+	actions: HTMLButtonElement[],
+	hint?: string,
+	headExtra?: HTMLElement,
+): HTMLElement {
 	const wrapper = el('div', { class: 'portal-section' });
 	const head = el('div', { class: 'portal-label' }, [label]);
+	if (hint) {
+		head.append(el('span', { class: 'portal-hint mono' }, [hint]));
+	}
+	if (headExtra) {
+		head.append(el('span', { class: 'portal-label-extra' }, [headExtra]));
+	}
 	const row = el('div', { class: 'portal-row' });
-	const code = el('code', { class: `portal-value${mono ? ' mono' : ''}` }, [value]);
-	row.append(code, ...actions);
+	row.append(el('code', { class: 'portal-value mono' }, [value]), ...actions);
 	wrapper.append(head, row);
+	return wrapper;
+}
+
+/** 调用地址区块：主地址 + 完整路径开关 + 其它兼容地址 */
+function callSection(data: PortalData): HTMLElement {
+	const wrapper = el('div', { class: 'portal-section' });
+	const head = el('div', { class: 'portal-label' }, [
+		t('callUrl'),
+		el('span', { class: 'portal-hint mono' }, ['OPENAI_BASE_URL']),
+		el('span', { class: 'portal-label-extra' }, [fullUrlSwitch()]),
+	]);
+
+	const row = el('div', { class: 'portal-row' });
+	const code = urlCode(data.callUrl, data.endpoints?.openai.full ?? data.callUrl, 'portal-value');
+	row.append(code, copyUrlButton(code));
+	wrapper.append(head, row);
+
+	if (data.endpoints) {
+		// 主地址是 OpenAI 兼容入口；下方补充 Claude Code 与 Gemini CLI 需要的其它前缀
+		const extras = el('div', { class: 'endpoint-list' });
+		extras.append(el('div', { class: 'endpoint-list-label' }, [t('otherEndpoints')]));
+		extras.append(
+			endpointRow(t('endpointAnthropic'), 'ANTHROPIC_BASE_URL', data.endpoints.anthropic.base, data.endpoints.anthropic.full),
+			endpointRow(t('endpointGemini'), 'GOOGLE_GEMINI_BASE_URL', data.endpoints.gemini.base, data.endpoints.gemini.full),
+		);
+		wrapper.append(extras);
+	}
 	return wrapper;
 }
 
@@ -114,7 +270,7 @@ export function renderPortal(container: HTMLElement, data: PortalData, handlers:
 	});
 
 	card.append(
-		section(t('callUrl'), data.callUrl, [copyButton(data.callUrl)]),
+		callSection(data),
 		section(t('personalToken'), data.token, [copyButton(data.token), rotate]),
 	);
 
@@ -123,7 +279,7 @@ export function renderPortal(container: HTMLElement, data: PortalData, handlers:
 	if (data.models.length) {
 		const list = el('div', { class: 'model-list' });
 		for (const model of data.models) {
-			list.append(el('span', { class: 'model-chip mono' }, [model]));
+			list.append(modelChip(model));
 		}
 		modelSection.append(list);
 	}
