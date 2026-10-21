@@ -1197,9 +1197,16 @@ node dist/index.js
 容器部署（镜像内执行 `pnpm install --prod` 并复制 `dist/`）：
 
 ```bash
+# 直接使用已发布镜像
+docker run -d --name cpa-gate -p 3001:3001 --env-file .env \
+  docker.io/yanranxiaoxi/cpa-gate:latest
+
+# 或本地构建
 docker build -t cpa-gate .
-docker run -p 3001:3001 --env-file .env cpa-gate
+docker run -d --name cpa-gate -p 3001:3001 --env-file .env cpa-gate
 ```
+
+镜像同时发布在 GitLab 私有仓库 `registry.gitlab.soraharu.com/xiaoxi/cpa-gate:latest`。
 
 镜像内置 `CPA_MANAGEMENT_URL=http://127.0.0.1:8317` 作为默认值，跨容器部署时覆盖即可。
 

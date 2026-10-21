@@ -281,10 +281,12 @@ Only keys matching `^([\w-]{1,128})\.([\w-]{43})$` are managed by this service. 
 
 ## Docker
 
+Published image: [`docker.io/yanranxiaoxi/cpa-gate`](https://hub.docker.com/r/yanranxiaoxi/cpa-gate) (`latest` follows the default branch).
+
 ```bash
-pnpm build
-docker build -t cpa-gate .
-docker run -p 3001:3001 \
+docker run -d --name cpa-gate \
+  -p 3001:3001 \
+  -e CPA_MANAGEMENT_URL='http://cliproxyapi:8317' \
   -e CPA_MANAGEMENT_KEY='…' \
   -e OIDC_ISSUER='https://sso.example.com/realms/main' \
   -e OIDC_CLIENT_ID='cpa-gate' \
@@ -295,10 +297,21 @@ docker run -p 3001:3001 \
   -e KEYCLOAK_ADMIN_CLIENT_SECRET='…' \
   -e SESSION_SECRET='…' \
   -e PRUNE_API_KEY='…' \
+  docker.io/yanranxiaoxi/cpa-gate:latest
+```
+
+To build locally instead, then run your own tag:
+
+```bash
+pnpm build
+docker build -t cpa-gate .
+docker run -d --name cpa-gate -p 3001:3001 \
+  -e CPA_MANAGEMENT_KEY='…' \
+  -e SESSION_SECRET='…' \
   cpa-gate
 ```
 
-The image runs `pnpm install --prod` and copies `dist/` (backend + `public/`). `CPA_MANAGEMENT_URL` defaults to `http://127.0.0.1:8317`; override it when CLIProxyAPI runs in another container.
+The image is also available from the GitLab registry as `registry.gitlab.soraharu.com/xiaoxi/cpa-gate:latest`. It runs `pnpm install --prod` and copies `dist/` (backend + `public/`). `CPA_MANAGEMENT_URL` defaults to `http://127.0.0.1:8317`; override it when CLIProxyAPI runs in another container.
 
 ## Development
 

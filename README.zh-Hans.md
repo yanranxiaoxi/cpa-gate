@@ -280,10 +280,12 @@ curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
 
 ## Docker
 
+已发布镜像：[`docker.io/yanranxiaoxi/cpa-gate`](https://hub.docker.com/r/yanranxiaoxi/cpa-gate)（`latest` 跟随默认分支）。
+
 ```bash
-pnpm build
-docker build -t cpa-gate .
-docker run -p 3001:3001 \
+docker run -d --name cpa-gate \
+  -p 3001:3001 \
+  -e CPA_MANAGEMENT_URL='http://cliproxyapi:8317' \
   -e CPA_MANAGEMENT_KEY='…' \
   -e OIDC_ISSUER='https://sso.example.com/realms/main' \
   -e OIDC_CLIENT_ID='cpa-gate' \
@@ -294,10 +296,21 @@ docker run -p 3001:3001 \
   -e KEYCLOAK_ADMIN_CLIENT_SECRET='…' \
   -e SESSION_SECRET='…' \
   -e PRUNE_API_KEY='…' \
+  docker.io/yanranxiaoxi/cpa-gate:latest
+```
+
+如需本地构建，再运行自己打的标签：
+
+```bash
+pnpm build
+docker build -t cpa-gate .
+docker run -d --name cpa-gate -p 3001:3001 \
+  -e CPA_MANAGEMENT_KEY='…' \
+  -e SESSION_SECRET='…' \
   cpa-gate
 ```
 
-镜像内执行 `pnpm install --prod`，并复制 `dist/`（后端 + `public/`）。`CPA_MANAGEMENT_URL` 默认是 `http://127.0.0.1:8317`，CLIProxyAPI 在其它容器时需覆盖。
+镜像同时发布在 GitLab 私有仓库：`registry.gitlab.soraharu.com/xiaoxi/cpa-gate:latest`。镜像内执行 `pnpm install --prod`，并复制 `dist/`（后端 + `public/`）。`CPA_MANAGEMENT_URL` 默认是 `http://127.0.0.1:8317`，CLIProxyAPI 在其它容器时需覆盖。
 
 ## 开发
 
