@@ -787,7 +787,8 @@ Authorization: Bearer <key>
 - 深色：`--bg:#0e1116`、`--card:#1b1f27`、`--accent:#5b8def`
 - 圆角：`--radius:12px`、`--radius-sm:8px`
 - 字体：系统字体栈；Token/URL 使用 `--mono`
-- 顶栏：sticky，56px 最小高度，白底/深色卡片底，底部 1px 边框
+- 顶栏：sticky，56px 最小高度，白底/深色卡片底，底部 1px 边框；右侧依次为语言切换、主题切换、GitHub 入口、用户区
+- GitHub 入口：`.icon-btn` 尺寸的图标链接，新标签页打开（`rel="noopener noreferrer"`），自带 `title` / `aria-label`
 - 品牌：`brand::before` 渐变色块 + 名称 + 小号副标题
 - 按钮：`.btn`、`.btn.primary`、`.btn.ghost`、`.icon-btn`
 - 弹窗：`.modal-overlay` + `.modal-dialog`，遮罩点击 / Esc 关闭
