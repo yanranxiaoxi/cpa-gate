@@ -25,7 +25,7 @@
 	"usernameLabel": "Username: {name}",
 	"retryLogin": "Try signing in again",
 	"authDisabled": "Sign-in is not configured on this server.",
-	"loginRequired": "Sign in to get your CLIProxyAPI token",
+	"loginRequired": "Sign in to get your CPA token",
 	"loginHint": "Use single sign-on. A personal token is issued automatically after sign-in.",
 	"callUrl": "Endpoint",
 	"personalToken": "Personal token",

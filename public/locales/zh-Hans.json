@@ -25,7 +25,7 @@
 	"usernameLabel": "用户名：{name}",
 	"retryLogin": "重新登录",
 	"authDisabled": "本服务尚未配置登录。",
-	"loginRequired": "登录后获取你的 CLIProxyAPI Token",
+	"loginRequired": "登录后获取你的 CPA Token",
 	"loginHint": "使用统一身份认证登录，登录后会自动为你签发个人 Token。",
 	"callUrl": "调用地址",
 	"personalToken": "个人 Token",
