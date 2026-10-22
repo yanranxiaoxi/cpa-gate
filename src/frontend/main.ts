@@ -1,7 +1,7 @@
 import type { Theme } from './theme';
 import type { AuthStatus, SiteText } from './types';
 import * as api from './api';
-import { getSiteConfig, loadConfig } from './api';
+import { getSiteConfig, getSiteTitle, loadConfig } from './api';
 import { renderAuth } from './auth';
 import { getLang, initI18n, setLang, SUPPORTED_LANGS, t } from './i18n';
 import { load, renderDenied, renderGuest, renderPortalError } from './portal';
@@ -21,7 +21,7 @@ function siteText(): SiteText {
 
 /** 站点标题：当前语言的 SITE_TITLE_* 优先，否则用语言包默认文案 */
 function siteTitle(): string {
-	return siteText().title || t('appName');
+	return getSiteTitle();
 }
 
 /** 站点副标题：当前语言的 SITE_SUBTITLE_* 优先，否则用语言包默认文案 */

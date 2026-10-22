@@ -502,6 +502,28 @@ main.container {
 	overflow-wrap: anywhere;
 }
 
+/* ===== 快速配置 ===== */
+.quick-config-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.quick-config-btn {
+	cursor: pointer;
+	transition: border-color 0.15s ease, filter 0.15s ease, background 0.15s ease;
+}
+
+.quick-config-btn:hover {
+	border-color: var(--accent);
+	background: var(--accent-soft);
+}
+
+.quick-config-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
 .model-list {
 	display: flex;
 	flex-wrap: wrap;

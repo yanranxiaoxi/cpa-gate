@@ -12,6 +12,7 @@
 
 - 调用地址
 - 个人 Token（支持轮换）
+- 快速配置（一键导入 Cherry Studio、Chatbox、OpenCat、NextChat、LobeChat）
 - 当前可用模型（点击模型名即可复制）
 
 ## 工作原理

@@ -1,5 +1,5 @@
 import type { DeniedInfo, PortalData } from './types';
-import { loadPortal } from './api';
+import { getSiteTitle, loadPortal } from './api';
 import { closeModal, openLoginModal, openModal } from './auth';
 import { t } from './i18n';
 import { ApiError } from './types';
@@ -206,6 +206,200 @@ function callSection(data: PortalData): HTMLElement {
 	return wrapper;
 }
 
+/**
+ * 从 API 基址解析提供商标识符（用于客户端配置 ID）
+ * 规则：取 host / hostname 并将非字母数字字符替换为连字符，如 https://ai-chat.sandstack.org -> ai-chat-sandstack-org
+ */
+export function parseProviderIdFromBaseUrl(rawUrl: string): string {
+	try {
+		const parsed = new URL(rawUrl);
+		const source = parsed.hostname || parsed.host;
+		const id = source.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+		return id || 'cpa-gate';
+	}
+	catch {
+		const cleaned = rawUrl.replace(/^https?:\/\//i, '').split('/')[0];
+		const id = cleaned.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+		return id || 'cpa-gate';
+	}
+}
+
+/**
+ * 工具辅助：将字符串以 UTF-8 编码为 URL-Safe Base64（+ 转 _，/ 转 -）
+ */
+function utf8ToBase64(text: string, urlSafe = false): string {
+	const bytes = new TextEncoder().encode(text);
+	let binary = '';
+	for (let i = 0; i < bytes.length; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	const base64 = btoa(binary);
+	return urlSafe ? base64.replace(/\+/g, '_').replace(/\//g, '-') : base64;
+}
+
+/**
+ * 分解调用地址，拆出 origin (apiHost) 与 pathname (apiPath)
+ */
+function splitHostAndPath(callUrl: string): { apiHost: string; apiPath: string } {
+	try {
+		const parsed = new URL(callUrl);
+		return {
+			apiHost: parsed.origin,
+			apiPath: parsed.pathname || '/v1',
+		};
+	}
+	catch {
+		const match = callUrl.match(/^(https?:\/\/[^/]+)(\/.*)?$/i);
+		if (match) {
+			return { apiHost: match[1], apiPath: match[2] || '/v1' };
+		}
+		return { apiHost: callUrl, apiPath: '/v1' };
+	}
+}
+
+/**
+ * 构建 Cherry Studio 一键导入 Deep Link
+ * 协议格式：cherrystudio://providers/api-keys?v=1&data={urlSafeBase64(json)}
+ */
+export function buildCherryStudioUrl(params: {
+	id: string;
+	name: string;
+	baseUrl: string;
+	apiKey: string;
+}): string {
+	const config = {
+		id: params.id,
+		name: params.name,
+		baseUrl: params.baseUrl,
+		apiKey: params.apiKey,
+		type: 'openai',
+	};
+	const base64 = utf8ToBase64(JSON.stringify(config), true);
+	return `cherrystudio://providers/api-keys?v=1&data=${base64}`;
+}
+
+/**
+ * 构建 Chatbox 一键导入 Deep Link
+ * 协议格式：chatbox://provider/import?config={base64(json)}
+ */
+export function buildChatboxUrl(params: {
+	id: string;
+	name: string;
+	callUrl: string;
+	apiKey: string;
+}): string {
+	const { apiHost, apiPath } = splitHostAndPath(params.callUrl);
+	const config = {
+		isCustom: true,
+		id: params.id,
+		name: params.name,
+		type: 'openai',
+		settings: {
+			apiHost,
+			apiPath,
+			apiKey: params.apiKey,
+		},
+	};
+	const base64 = utf8ToBase64(JSON.stringify(config), false);
+	return `chatbox://provider/import?config=${encodeURIComponent(base64)}`;
+}
+
+/**
+ * 构建 OpenCat (iOS / macOS) 一键导入 Deep Link
+ * 协议格式：opencat://team/join?domain={url}&token={key}
+ */
+export function buildOpenCatUrl(params: {
+	baseUrl: string;
+	apiKey: string;
+}): string {
+	return `opencat://team/join?domain=${encodeURIComponent(params.baseUrl)}&token=${encodeURIComponent(params.apiKey)}`;
+}
+
+/**
+ * 构建 NextChat (ChatGPT-Next-Web) 网页直达链接
+ * 格式：https://app.nextchat.dev/#/?settings={"key":"...","url":"..."}
+ */
+export function buildNextChatUrl(params: {
+	baseUrl: string;
+	apiKey: string;
+}): string {
+	const settings = JSON.stringify({ key: params.apiKey, url: params.baseUrl });
+	return `https://app.nextchat.dev/#/?settings=${encodeURIComponent(settings)}`;
+}
+
+/**
+ * 构建 LobeChat 网页直达链接
+ * 格式：https://chat-preview.lobehub.com/?settings={"keyVaults":{"openai":{"apiKey":"...","baseURL":"..."}}}
+ */
+export function buildLobeChatUrl(params: {
+	baseUrl: string;
+	apiKey: string;
+}): string {
+	const settings = JSON.stringify({
+		keyVaults: {
+			openai: {
+				apiKey: params.apiKey,
+				baseURL: params.baseUrl,
+			},
+		},
+	});
+	return `https://chat-preview.lobehub.com/?settings=${encodeURIComponent(settings)}`;
+}
+
+/** 快速配置区块（一键导入 Cherry Studio、Chatbox、OpenCat、NextChat、LobeChat 等客户端） */
+function quickConfigSection(data: PortalData): HTMLElement {
+	const wrapper = el('div', { class: 'portal-section' });
+	const head = el('div', { class: 'portal-label' }, [t('quickConfig')]);
+	const row = el('div', { class: 'portal-row quick-config-row' });
+
+	const providerId = parseProviderIdFromBaseUrl(data.endpoints?.anthropic.base || data.callUrl);
+	const siteName = getSiteTitle();
+	const apiKey = data.token ?? '';
+
+	const tools = [
+		{
+			name: 'Cherry Studio',
+			url: buildCherryStudioUrl({ id: providerId, name: siteName, baseUrl: data.callUrl, apiKey }),
+			hint: t('cherryStudioHint'),
+		},
+		{
+			name: 'Chatbox',
+			url: buildChatboxUrl({ id: providerId, name: siteName, callUrl: data.callUrl, apiKey }),
+			hint: t('chatboxHint'),
+		},
+		{
+			name: 'OpenCat',
+			url: buildOpenCatUrl({ baseUrl: data.callUrl, apiKey }),
+			hint: t('openCatHint'),
+		},
+		{
+			name: 'NextChat',
+			url: buildNextChatUrl({ baseUrl: data.callUrl, apiKey }),
+			hint: t('nextChatHint'),
+		},
+		{
+			name: 'LobeChat',
+			url: buildLobeChatUrl({ baseUrl: data.callUrl, apiKey }),
+			hint: t('lobeChatHint'),
+		},
+	];
+
+	for (const tool of tools) {
+		const btn = el('a', {
+			'class': 'btn small ghost quick-config-btn',
+			'href': tool.url,
+			'target': '_blank',
+			'rel': 'noopener noreferrer',
+			'title': tool.hint,
+			'aria-label': tool.hint,
+		}, [tool.name]);
+		row.append(btn);
+	}
+
+	wrapper.append(head, row);
+	return wrapper;
+}
+
 /** 轮换确认弹窗 */
 function confirmRotate(trigger: HTMLElement, onRotate: () => Promise<void>): void {
 	const text = el('p', { class: 'modal-text' }, [t('rotateConfirm')]);
@@ -272,6 +466,7 @@ export function renderPortal(container: HTMLElement, data: PortalData, handlers:
 	card.append(
 		callSection(data),
 		section(t('personalToken'), data.token, [copyButton(data.token), rotate]),
+		quickConfigSection(data),
 	);
 
 	const modelSection = el('div', { class: 'portal-section' });

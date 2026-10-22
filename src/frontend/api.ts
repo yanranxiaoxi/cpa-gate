@@ -1,4 +1,5 @@
 import type { AppConfig, AuthStatus, PortalData } from './types';
+import { getLang, t } from './i18n';
 import { ApiError } from './types';
 
 let siteConfig: AppConfig = { callUrl: '' };
@@ -53,6 +54,12 @@ export async function loadConfig(): Promise<AppConfig> {
 /** 读取已加载的站点配置 */
 export function getSiteConfig(): AppConfig {
 	return siteConfig;
+}
+
+/** 获取当前语言下的站点标题（SITE_TITLE_* 优先，否则为默认 appName） */
+export function getSiteTitle(): string {
+	const site = siteConfig.site?.[getLang()];
+	return site?.title || t('appName');
 }
 
 /** 加载登录状态 */

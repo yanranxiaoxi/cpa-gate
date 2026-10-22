@@ -750,6 +750,10 @@ Authorization: Bearer <key>
 │  │ 个人 Token                                          │  │
 │  │ 0f8fad5b-....Kx3n...                 [复制] [轮换]  │  │
 │  ├────────────────────────────────────────────────────┤  │
+│  │ 快速配置                                            │  │
+│  │ [Cherry Studio] [Chatbox] [OpenCat]                │  │
+│  │ [NextChat] [LobeChat]                              │  │
+│  ├────────────────────────────────────────────────────┤  │
 │  │ 可用模型                                            │  │
 │  │ [gpt-5] [claude-sonnet-4] [gemini-2.5-pro]         │  │
 │  └────────────────────────────────────────────────────┘  │
@@ -762,6 +766,13 @@ Authorization: Bearer <key>
 - 未登录：同一位置显示一张简洁的登录卡片和登录按钮。
 - 已登录：只显示上述三块内容，不增加统计、图表、导航。
 - 「调用地址」区块右上角提供 **完整 URL** 开关：关闭（默认）显示客户端环境变量该填的基址，打开显示可直接调用的完整接口路径；状态保存在 `localStorage`（键 `cpa-full-url`），并作用于该区块内的所有地址。复制按钮复制当前显示的内容。
+- 「快速配置」区块位于个人 Token 下方，提供常用的客户端一键配置入口：
+  - **Cherry Studio**：`cherrystudio://providers/api-keys?v=1&data={urlSafeBase64(json)}`
+  - **Chatbox**：`chatbox://provider/import?config={base64(json)}`
+  - **OpenCat**：`opencat://team/join?domain={url}&token={key}`（针对 iOS / macOS）
+  - **NextChat (Web)**：`https://app.nextchat.dev/#/?settings={json}`（浏览器新标签直达并预填配置）
+  - **LobeChat (Web)**：`https://chat-preview.lobehub.com/?settings={json}`（浏览器新标签直达并预填配置）
+  配置中 `id` 取 `CPA_API_BASE_URL` 解析出的连字符名称（如 `ai-chat.sandstack.org` -> `ai-chat-sandstack-org`），`name` 采用当前语言下的站点标题，`baseUrl` 为主调用地址（`${base}/v1`），`apiKey` 为当前用户 Token。
 
   | 协议 | 基址（关） | 完整路径（开） |
   | --- | --- | --- |
