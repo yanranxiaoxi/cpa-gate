@@ -13,7 +13,7 @@ Users sign in with your existing SSO (OIDC, Keycloak friendly) and receive a per
 
 - the API endpoint
 - the personal token (with rotation)
-- quick setup (one-click import into Cherry Studio, Chatbox, OpenCat, NextChat, LobeChat)
+- quick setup (one-click import into Cherry Studio, Chatbox, OpenCat)
 - the currently available models (click any model to copy its name)
 
 ## How it works

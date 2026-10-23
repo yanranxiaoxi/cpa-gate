@@ -315,38 +315,7 @@ export function buildOpenCatUrl(params: {
 	return `opencat://team/join?domain=${encodeURIComponent(params.baseUrl)}&token=${encodeURIComponent(params.apiKey)}`;
 }
 
-/**
- * 构建 NextChat (ChatGPT-Next-Web) 网页直达链接
- * 格式：https://app.nextchat.dev/#/?settings={"key":"...","url":"..."}
- */
-export function buildNextChatUrl(params: {
-	baseUrl: string;
-	apiKey: string;
-}): string {
-	const settings = JSON.stringify({ key: params.apiKey, url: params.baseUrl });
-	return `https://app.nextchat.dev/#/?settings=${encodeURIComponent(settings)}`;
-}
-
-/**
- * 构建 LobeChat 网页直达链接
- * 格式：https://chat-preview.lobehub.com/?settings={"keyVaults":{"openai":{"apiKey":"...","baseURL":"..."}}}
- */
-export function buildLobeChatUrl(params: {
-	baseUrl: string;
-	apiKey: string;
-}): string {
-	const settings = JSON.stringify({
-		keyVaults: {
-			openai: {
-				apiKey: params.apiKey,
-				baseURL: params.baseUrl,
-			},
-		},
-	});
-	return `https://chat-preview.lobehub.com/?settings=${encodeURIComponent(settings)}`;
-}
-
-/** 快速配置区块（一键导入 Cherry Studio、Chatbox、OpenCat、NextChat、LobeChat 等客户端） */
+/** 快速配置区块（一键导入 Cherry Studio、Chatbox、OpenCat 等客户端） */
 function quickConfigSection(data: PortalData): HTMLElement {
 	const wrapper = el('div', { class: 'portal-section' });
 	const head = el('div', { class: 'portal-label' }, [t('quickConfig')]);
@@ -371,16 +340,6 @@ function quickConfigSection(data: PortalData): HTMLElement {
 			name: 'OpenCat',
 			url: buildOpenCatUrl({ baseUrl: data.callUrl, apiKey }),
 			hint: t('openCatHint'),
-		},
-		{
-			name: 'NextChat',
-			url: buildNextChatUrl({ baseUrl: data.callUrl, apiKey }),
-			hint: t('nextChatHint'),
-		},
-		{
-			name: 'LobeChat',
-			url: buildLobeChatUrl({ baseUrl: data.callUrl, apiKey }),
-			hint: t('lobeChatHint'),
 		},
 	];
 

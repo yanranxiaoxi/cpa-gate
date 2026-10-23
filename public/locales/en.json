@@ -34,8 +34,6 @@
 	"cherryStudioHint": "Open deep link to configure Cherry Studio automatically",
 	"chatboxHint": "Open deep link to configure Chatbox automatically",
 	"openCatHint": "Open deep link to configure OpenCat (iOS / macOS) automatically",
-	"nextChatHint": "Open NextChat in browser with current settings prefilled",
-	"lobeChatHint": "Open LobeChat in browser with current settings prefilled",
 	"otherEndpoints": "Other compatible endpoints",
 	"endpointAnthropic": "Anthropic compatible",
 	"endpointGemini": "Gemini compatible",
