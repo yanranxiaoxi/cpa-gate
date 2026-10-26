@@ -425,14 +425,15 @@ sequenceDiagram
 
 ### 6.2 页面初始化
 
-1. 加载 i18n、主题、`GET /api/config`。
-2. 加载 `GET /api/auth/status`，渲染右上角用户区。
-3. 已登录时请求 `GET /api/portal`。
-4. 服务端在 `/api/portal` 中查找当前用户的 Key：
+1. `public/index.html` 的 `<head>` 内联同步脚本：读取 `cpa-theme`（无有效值时按 `prefers-color-scheme`）设置 `<html data-theme>`，并同步 `<meta name="color-scheme">`；在样式表之前执行，避免首屏闪白，也让 Dark Reader 等扩展在注入时读出原生暗色。
+2. 加载 i18n、主题、`GET /api/config`；`initTheme()` 先于 i18n 执行，不依赖语言包网络请求。
+3. 加载 `GET /api/auth/status`，渲染右上角用户区。
+4. 已登录时请求 `GET /api/portal`。
+5. 服务端在 `/api/portal` 中查找当前用户的 Key：
    - 已存在：直接返回第一枚，不重复查询 Keycloak。
    - 不存在：**先重新校验 Keycloak 资格**，合格才创建；不合格返回 `eligible:false`，不创建；Keycloak 不可用返回 `tokenError`，不创建。
    - 该规则确保“已被清理的用户”不能靠刷新页面重新拿到 Key。
-5. 服务端查询模型列表并返回。
+6. 服务端查询模型列表并返回。
 
 ### 6.3 密钥轮换
 

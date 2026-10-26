@@ -1,14 +1,14 @@
 {
 	"name": "CPA Gate",
 	"short_name": "CPA Gate",
-	"description": "CLIProxyAPI 入口：使用 SSO 登录获取个人 Token",
+	"description": "CLIProxyAPI 入口：使用 SSO 登录获取 API 密钥",
 	"lang": "zh-CN",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",
 	"orientation": "any",
-	"background_color": "#12151b",
-	"theme_color": "#12151b",
+	"background_color": "#0e1116",
+	"theme_color": "#0e1116",
 	"icons": [
 		{
 			"src": "/icons/icon-192.png",
