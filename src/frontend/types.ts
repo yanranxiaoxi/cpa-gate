@@ -63,7 +63,7 @@ export interface PortalData {
 	/** 各协议调用地址 */
 	endpoints?: Endpoints;
 	token: string | null;
-	/** Token 相关错误：cpa_unavailable / verification_unavailable */
+	/** API 密钥相关错误：cpa_unavailable / verification_unavailable */
 	tokenError?: string;
 	models: string[];
 	modelsUnavailable: boolean;

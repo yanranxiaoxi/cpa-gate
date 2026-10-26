@@ -11,7 +11,7 @@
 用户通过现有 SSO（OIDC，主要面向 Keycloak）登录后会获得一枚个人 CLIProxyAPI Key。页面只展示必要信息：
 
 - 调用地址
-- 个人 Token（支持轮换）
+- API 密钥（支持轮换）
 - 快速配置（一键导入 Cherry Studio、Chatbox、OpenCat）
 - 当前可用模型（点击模型名即可复制）
 
@@ -27,7 +27,7 @@ flowchart LR
     U[用户] -->|OIDC 登录| G[CPA Gate]
     G -->|Admin API| K[Keycloak]
     G -->|Management API| C[CLIProxyAPI]
-    U -->|Token| C
+    U -->|密钥| C
     O[运维 / cron] -->|POST /api/admin/keys/prune| G
 ```
 
@@ -79,9 +79,9 @@ node dist/index.js
 
 ```env
 SITE_TITLE_ZH_HANS=知行 AI 网关
-SITE_DESCRIPTION_ZH_HANS=登录后获取你的 CLIProxyAPI Token
+SITE_DESCRIPTION_ZH_HANS=登录后获取你的 CLIProxyAPI 密钥
 SITE_TITLE_EN=ZhiXing AI Gateway
-SITE_DESCRIPTION_EN=Sign in to get your CLIProxyAPI token
+SITE_DESCRIPTION_EN=Sign in to get your CLIProxyAPI key
 ```
 
 ### CLIProxyAPI
@@ -258,8 +258,8 @@ curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
 | `GET` | `/api/auth/login` | — | 跳转 IdP |
 | `GET` | `/api/auth/callback` | — | OIDC 回调 |
 | `GET` | `/api/auth/logout` | — | 退出；`?sso=1` 同时结束 IdP 会话 |
-| `GET` | `/api/portal` | 会话 | 调用地址、Token、模型 |
-| `POST` | `/api/token/rotate` | 会话 | 轮换个人 Token |
+| `GET` | `/api/portal` | 会话 | 调用地址、API 密钥、模型 |
+| `POST` | `/api/token/rotate` | 会话 | 轮换 API 密钥 |
 | `POST` | `/api/admin/keys/prune` | `PRUNE_API_KEY` | 清理不合格用户的 Key |
 
 ## Key 格式
@@ -273,7 +273,7 @@ curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
 ## 安全说明
 
 - Management Key 与 SSO 密钥永远不下发浏览器。
-- Token 只通过已认证的 `no-store` 响应返回，日志中脱敏。
+- 密钥只通过已认证的 `no-store` 响应返回，日志中脱敏。
 - 清理接口使用常量时间比较；未配置时返回 404。
 - Keycloak 不可用时，登录 fail closed，清理 fail safe（保留 Key）。
 - 被清理的用户刷新页面无法重新获得 Key：`/api/portal` 在补发前会重新校验 Keycloak。

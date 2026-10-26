@@ -106,7 +106,7 @@ function extractModels(payload: unknown): string[] {
 }
 
 /**
- * 使用用户自己的 Token 查询可用模型
+ * 使用用户自己的 API 密钥查询可用模型
  *
  * 刚创建/轮换的 Key 可能需要极短时间才在上游生效，遇到 401 时做 3 次短重试。
  */

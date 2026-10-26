@@ -68,7 +68,7 @@ function callUrl(): string {
 }
 
 /**
- * 页面数据控制器：调用地址、个人 Token、可用模型
+ * 页面数据控制器：调用地址、API 密钥、可用模型
  */
 class Portal extends Controller {
 	/** GET /api/config：前端公共配置 */

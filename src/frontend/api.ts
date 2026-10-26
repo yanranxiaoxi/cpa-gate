@@ -69,7 +69,7 @@ export async function loadAuthStatus(): Promise<AuthStatus> {
 	return statusCache;
 }
 
-/** 加载页面数据（调用地址、Token、模型） */
+/** 加载页面数据（调用地址、API 密钥、模型） */
 export async function loadPortal(): Promise<PortalData> {
 	try {
 		return await sameOriginJson<PortalData>('/api/portal');
@@ -84,10 +84,10 @@ export async function loadPortal(): Promise<PortalData> {
 }
 
 /**
- * 轮换 Token
+ * 轮换 API 密钥
  *
- * 502 rotate_incomplete 表示新 Token 已生效但旧 Token 未删干净：
- * 仍然返回新 Token，让用户先拿到可用的凭据。
+ * 502 rotate_incomplete 表示新密钥已生效但旧密钥未删干净：
+ * 仍然返回新密钥，让用户先拿到可用的凭据。
  */
 export async function rotateToken(): Promise<{ token: string; incomplete: boolean }> {
 	const res = await fetch('/api/token/rotate', { method: 'POST' });

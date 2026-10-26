@@ -156,7 +156,7 @@ export async function ensureUserKey(userId: string): Promise<string> {
  * 轮换用户 Key
  *
  * 顺序：先幂等新增新 Key，成功后再删除所有旧 Key。
- * 第 4 步失败时新 Key 已可用，抛出 RotateIncompleteError 让调用方把新 Token 返回给用户。
+ * 第 4 步失败时新 Key 已可用，抛出 RotateIncompleteError 让调用方把新密钥返回给用户。
  */
 export async function rotateUserKey(userId: string): Promise<string> {
 	const release = await mutex.acquire();

@@ -14,7 +14,7 @@ CPA Gate 是一个面向 [CLIProxyAPI](https://github.com/router-for-me/CLIProxy
 - 登录成功后，服务为用户在 CLIProxyAPI 中创建一枚个人 API Key。
 - 用户在页面上查看：
   - CLIProxyAPI 调用地址
-  - 个人 Token（支持轮换）
+  - API 密钥（支持轮换）
   - 当前可用的模型列表
 - 服务不引入数据库。所有 Key 状态都存放在 CLIProxyAPI 的客户端认证 Key 列表中。
 - 提供一个由环境变量 Key 鉴权的管理接口，用于扫描并清理已经失效的用户 Key。
@@ -202,7 +202,7 @@ flowchart LR
     G -->|Admin API: 用户/用户组| K
     G -->|管理 API: 读写 api-keys| C[CLIProxyAPI]
     G -->|/v1/models| C
-    U -->|使用 Token 调用| C
+    U -->|使用密钥调用| C
     A[定时任务 / 运维] -->|POST /api/admin/keys/prune| G
 ```
 
@@ -434,7 +434,7 @@ sequenceDiagram
    - 该规则确保“已被清理的用户”不能靠刷新页面重新拿到 Key。
 5. 服务端查询模型列表并返回。
 
-### 6.3 Token 轮换
+### 6.3 密钥轮换
 
 ```http
 POST /api/token/rotate
@@ -599,8 +599,8 @@ curl -fsS -X POST \
 
 | 方法 | 路径 | 鉴权 | 说明 |
 | --- | --- | --- | --- |
-| `GET` | `/api/portal` | 会话 | 页面数据：调用地址、Token、模型 |
-| `POST` | `/api/token/rotate` | 会话 | 轮换 Token |
+| `GET` | `/api/portal` | 会话 | 页面数据：调用地址、API 密钥、模型 |
+| `POST` | `/api/token/rotate` | 会话 | 轮换 API 密钥 |
 
 `/api/portal` 在 Key 已存在时不再查询 Keycloak；只有 Key 缺失时才重新校验资格并补发。因此被清理的用户刷新页面不会自动拿回 Key。
 
@@ -643,7 +643,7 @@ curl -fsS -X POST \
 }
 ```
 
-`eligible:false` 表示用户已不在允许的用户组/用户名单、已禁用或已删除。前端显示“账号已失去访问资格”，同时展示该用户自己的 `userId`（带复制按钮，便于申请加入白名单），并引导用户退出；不得提供“重新获取 Token”按钮。
+`eligible:false` 表示用户已不在允许的用户组/用户名单、已禁用或已删除。前端显示“账号已失去访问资格”，同时展示该用户自己的 `userId`（带复制按钮，便于申请加入白名单），并引导用户退出；不得提供“重新获取密钥”按钮。
 
 Key 创建失败但用户资格正常时：
 
@@ -697,7 +697,7 @@ Authorization: Bearer <key>
 
 ### 7.4 模型列表
 
-- 服务端调用 `GET {CPA_MANAGEMENT_URL}/v1/models`，使用当前用户的 Token。
+- 服务端调用 `GET {CPA_MANAGEMENT_URL}/v1/models`，使用当前用户的 API 密钥。
   - 使用管理地址而不是展示地址：`CPA_API_BASE_URL` 可能是需要外部 DNS/回环 NAT 才能访问的公网域名，从服务端自身访问未必可达；管理地址一定是服务端可达的内网地址。
 - 请求超时使用 `CPA_TIMEOUT_MS`。
 - 兼容 OpenAI 风格 `data[].id`；若出现 `models[].name` 也做归一化。
@@ -747,7 +747,7 @@ Authorization: Bearer <key>
 │  │   Anthropic 兼容 ANTHROPIC_BASE_URL  [url] [复制]   │  │
 │  │   Gemini 兼容 GOOGLE_GEMINI_BASE_URL [url] [复制]   │  │
 │  ├────────────────────────────────────────────────────┤  │
-│  │ 个人 Token                                          │  │
+│  │ API 密钥                                            │  │
 │  │ 0f8fad5b-....Kx3n...                 [复制] [轮换]  │  │
 │  ├────────────────────────────────────────────────────┤  │
 │  │ 快速配置                                            │  │
@@ -765,11 +765,11 @@ Authorization: Bearer <key>
 - 未登录：同一位置显示一张简洁的登录卡片和登录按钮。
 - 已登录：只显示上述三块内容，不增加统计、图表、导航。
 - 「调用地址」区块右上角提供 **完整 URL** 开关：关闭（默认）显示客户端环境变量该填的基址，打开显示可直接调用的完整接口路径；状态保存在 `localStorage`（键 `cpa-full-url`），并作用于该区块内的所有地址。复制按钮复制当前显示的内容。
-- 「快速配置」区块位于个人 Token 下方，提供常用的客户端一键配置入口：
+- 「快速配置」区块位于 API 密钥下方，提供常用的客户端一键配置入口：
   - **Cherry Studio**：`cherrystudio://providers/api-keys?v=1&data={urlSafeBase64(json)}`
   - **Chatbox**：`chatbox://provider/import?config={base64(json)}`
   - **OpenCat**：`opencat://team/join?domain={url}&token={key}`（针对 iOS / macOS）
-  配置中 `id` 取 `CPA_API_BASE_URL` 解析出的连字符名称（如 `ai-chat.sandstack.org` -> `ai-chat-sandstack-org`），`name` 采用当前语言下的站点标题，`baseUrl` 为主调用地址（`${base}/v1`），`apiKey` 为当前用户 Token。
+  配置中 `id` 取 `CPA_API_BASE_URL` 解析出的连字符名称（如 `ai-chat.sandstack.org` -> `ai-chat-sandstack-org`），`name` 采用当前语言下的站点标题，`baseUrl` 为主调用地址（`${base}/v1`），`apiKey` 为当前用户 API 密钥。
 
   | 协议 | 基址（关） | 完整路径（开） |
   | --- | --- | --- |
@@ -779,10 +779,10 @@ Authorization: Bearer <key>
 
 - 模型为空：显示“暂无可用模型”；上游不可用：显示“暂时无法获取模型列表”。
 - 每个模型是胶囊形按钮（不是纯文本 span）：点击即复制模型名并 Toast 提示，可键盘聚焦、回车/空格触发，悬停显示“点击复制模型名”。
-- 所有提示态（未登录、未配置、登录被拒、失去资格、Token 获取失败、加载失败）统一使用 `.portal-card.notice-card`：四边内边距一致（桌面 32px/24px，窄屏 28px/18px）、居中、子元素间距 14px，避免按钮贴住卡片下边沿。
+- 所有提示态（未登录、未配置、登录被拒、失去资格、密钥获取失败、加载失败）统一使用 `.portal-card.notice-card`：四边内边距一致（桌面 32px/24px，窄屏 28px/18px）、居中、子元素间距 14px，避免按钮贴住卡片下边沿。
 - 登录被拒与失去资格时，卡片内展示“你的用户 ID”区块（等宽字体 + 复制按钮）；有用户名时附带一行提示。
-- Token 使用等宽字体，允许换行（`overflow-wrap:anywhere`），不溢出卡片。
-- 轮换按钮点击后打开确认弹窗，文案说明旧 Token 会立即失效。
+- 密钥使用等宽字体，允许换行（`overflow-wrap:anywhere`），不溢出卡片。
+- 轮换按钮点击后打开确认弹窗，文案说明旧密钥会立即失效。
 - 复制成功使用现有 `toast` 组件提示。
 - 所有动态文本使用 `textContent` / `textContent` 等价方式写入，不拼接 HTML。
 - 品牌文案按语言分别取 `SITE_*_ZH_HANS` / `SITE_*_EN`，缺省时回退语言包；`/api/config` 只下发非空字段。
@@ -794,7 +794,7 @@ Authorization: Bearer <key>
 - 浅色：`--bg:#f5f6f8`、`--card:#ffffff`、`--accent:#2563eb`
 - 深色：`--bg:#0e1116`、`--card:#1b1f27`、`--accent:#5b8def`
 - 圆角：`--radius:12px`、`--radius-sm:8px`
-- 字体：系统字体栈；Token/URL 使用 `--mono`
+- 字体：系统字体栈；密钥/URL 使用 `--mono`
 - 顶栏：sticky，56px 最小高度，白底/深色卡片底，底部 1px 边框；右侧依次为语言切换、主题切换、GitHub 入口、用户区
 - GitHub 入口：`.icon-btn` 尺寸的图标链接，新标签页打开（`rel="noopener noreferrer"`），自带 `title` / `aria-label`
 - 品牌：`brand::before` 渐变色块 + 名称 + 小号副标题
@@ -825,21 +825,21 @@ Authorization: Bearer <key>
 ```json
 {
   "appTitle": "CPA Gate",
-  "loginRequired": "登录后获取你的 CLIProxyAPI Token",
+  "loginRequired": "登录后获取你的 CPA 密钥",
   "callUrl": "调用地址",
   "otherEndpoints": "其它兼容地址",
   "endpointAnthropic": "Anthropic 兼容",
   "endpointGemini": "Gemini 兼容",
   "fullUrlToggle": "完整 URL",
   "fullUrlHint": "显示包含 https:// 的完整 URL",
-  "personalToken": "个人 Token",
+  "personalToken": "API 密钥",
   "models": "可用模型",
   "copy": "复制",
   "copied": "已复制",
   "rotate": "轮换",
-  "rotateConfirm": "轮换后旧 Token 会立即失效，正在使用旧 Token 的客户端需要更新。是否继续？",
-  "rotateDone": "Token 已轮换",
-  "tokenUnavailable": "暂时无法获取 Token，请稍后重试",
+  "rotateConfirm": "轮换后旧密钥会立即失效，正在使用旧密钥的客户端需要更新。是否继续？",
+  "rotateDone": "密钥已轮换",
+  "tokenUnavailable": "暂时无法获取密钥，请稍后重试",
   "modelsEmpty": "暂无可用模型",
   "modelsUnavailable": "暂时无法获取模型列表",
   "copyModel": "点击复制模型名",
@@ -1038,7 +1038,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 1. **管理 Key**
    - `CPA_MANAGEMENT_KEY` 只用于服务端请求，绝不下发前端。
    - 日志、错误响应、异常堆栈中不得出现。
-2. **用户 Token**
+2. **用户 API 密钥**
    - 仅在已认证会话的 `/api/portal` 和轮换响应中返回。
    - 响应头 `Cache-Control: no-store`。
    - 日志中脱敏。
@@ -1079,7 +1079,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 | Keycloak Admin Token 获取失败 | 登录失败 `?login=unavailable`；清理保留 Key 并记录错误 |
 | Keycloak 超时 / 5xx | 同上 |
 | Keycloak Admin 返回 401/403 | 视为 `keycloak_forbidden`，登录拒绝；清理保留 Key 并告警，绝不按“未命中名单”删除 |
-| CLIProxyAPI 不可用（登录时） | 登录成功，页面显示 Token 获取失败，可重试 |
+| CLIProxyAPI 不可用（登录时） | 登录成功，页面显示密钥获取失败，可重试 |
 | CLIProxyAPI 不可用（轮换时） | 502，旧 Key 保持不变 |
 | CLIProxyAPI 返回非 2xx | 映射为 `cpa_upstream_error`，记录状态码与响应摘要（脱敏） |
 | Key 列表为空 | 正常，首次登录创建 |
@@ -1090,7 +1090,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 | 清理时 Key 已被并发删除 | 视为成功，不报错 |
 | 清理并发调用 | 进程内串行；等待超时返回 409 |
 | 已清理用户刷新页面 | `/api/portal` 重新校验资格，不合格不重建 Key |
-| 用户已有会话但 Token 被手工删除 | `/api/portal` 复核资格后自动补发 |
+| 用户已有会话但密钥被手工删除 | `/api/portal` 复核资格后自动补发 |
 
 ---
 
@@ -1132,10 +1132,10 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 
 1. 未登录打开首页，显示简洁登录卡片。
 2. 登录弹窗样式与兄弟项目一致。
-3. 合格用户登录后看到调用地址、Token、模型列表。
+3. 合格用户登录后看到调用地址、API 密钥、模型列表。
 4. 复制按钮工作正常。
-5. 轮换后旧 Token 调用 `/v1/models` 返回 401，新 Token 正常。
-6. 刷新页面 Token 不变（无数据库但持久）。
+5. 轮换后旧密钥调用 `/v1/models` 返回 401，新密钥正常。
+6. 刷新页面密钥不变（无数据库但持久）。
 7. 将用户移出允许组，执行清理，Key 被删除。
 8. 删除 Keycloak 用户，执行清理，Key 被删除。
 9. 手工向 CLIProxyAPI 添加一枚非本服务格式的 Key，清理后仍然存在。
@@ -1149,8 +1149,8 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 - [ ] 无数据库、无额外持久化卷即可运行。
 - [ ] 用户 Key 以 Keycloak 用户 ID 开头。
 - [ ] 登录、登出、登录弹窗、登出弹窗流程与兄弟项目一致。
-- [ ] 页面仅包含调用地址、个人 Token、模型列表三块核心信息。
-- [ ] Token 支持轮换，轮换后旧 Token 失效。
+- [ ] 页面仅包含调用地址、API 密钥、模型列表三块核心信息。
+- [ ] API 密钥支持轮换，轮换后旧密钥失效。
 - [ ] 清理接口可以由环境变量 Key 独立鉴权。
 - [ ] 清理接口能识别已删除用户、禁用用户、离开允许组/用户名单的用户。
 - [ ] `ALLOWED_GROUPS` 与 `ALLOWED_USERS` 取并集，任一命中即可登录。
@@ -1158,7 +1158,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 - [ ] 清理接口不会触碰非本服务创建的 Key。
 - [ ] Keycloak 不可用时登录 fail closed、清理 fail safe。
 - [ ] 已被清理的用户无法通过刷新页面重新获得 Key。
-- [ ] 所有日志与错误响应不泄露完整 Token。
+- [ ] 所有日志与错误响应不泄露完整密钥。
 - [ ] 浅色/深色、桌面/移动端视觉与 `LibreTranslate-FrontPage`、`pingatlas` 保持一致。
 - [ ] `pnpm typecheck` 与 `pnpm build` 通过。
 
@@ -1297,6 +1297,6 @@ PRUNE_API_KEY=...
 | 登录时 Keycloak 不可用 | 拒绝登录 |
 | 清理时 Keycloak 不可用 | 保留 Key，记录错误 |
 | 清理鉴权 | `PRUNE_API_KEY`，`X-Admin-Key` 或 `Authorization` 请求头（Bearer） |
-| 模型来源 | 用户 Token 调用 `/v1/models` |
+| 模型来源 | 用户 API 密钥调用 `/v1/models` |
 | 页面 | 顶栏 + 三块信息卡片 + 简洁页脚 |
 | 与兄弟项目关系 | 复制共享 UI/SSO/构建代码，替换项目标识 |

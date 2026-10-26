@@ -12,7 +12,7 @@ A small, database-free entry point for [CLIProxyAPI](https://github.com/router-f
 Users sign in with your existing SSO (OIDC, Keycloak friendly) and receive a personal CLIProxyAPI key. The page only shows what matters:
 
 - the API endpoint
-- the personal token (with rotation)
+- the API key (with rotation)
 - quick setup (one-click import into Cherry Studio, Chatbox, OpenCat)
 - the currently available models (click any model to copy its name)
 
@@ -28,7 +28,7 @@ flowchart LR
     U[User] -->|OIDC login| G[CPA Gate]
     G -->|Admin API| K[Keycloak]
     G -->|Management API| C[CLIProxyAPI]
-    U -->|Token| C
+    U -->|API key| C
     O[Ops / cron] -->|POST /api/admin/keys/prune| G
 ```
 
@@ -80,9 +80,9 @@ Each field falls back to the built-in locale text when empty, so you can overrid
 
 ```env
 SITE_TITLE_ZH_HANS=知行 AI 网关
-SITE_DESCRIPTION_ZH_HANS=登录后获取你的 CLIProxyAPI Token
+SITE_DESCRIPTION_ZH_HANS=登录后获取你的 CLIProxyAPI 密钥
 SITE_TITLE_EN=ZhiXing AI Gateway
-SITE_DESCRIPTION_EN=Sign in to get your CLIProxyAPI token
+SITE_DESCRIPTION_EN=Sign in to get your CLIProxyAPI key
 ```
 
 ### CLIProxyAPI
@@ -259,8 +259,8 @@ Run it from cron frequently, for example every 10 minutes. Keys are only revoked
 | `GET` | `/api/auth/login` | — | Redirect to the IdP |
 | `GET` | `/api/auth/callback` | — | OIDC callback |
 | `GET` | `/api/auth/logout` | — | Sign out; `?sso=1` also ends the IdP session |
-| `GET` | `/api/portal` | Session | Endpoint, token, models |
-| `POST` | `/api/token/rotate` | Session | Rotate the personal token |
+| `GET` | `/api/portal` | Session | Endpoint, API key, models |
+| `POST` | `/api/token/rotate` | Session | Rotate the API key |
 | `POST` | `/api/admin/keys/prune` | `PRUNE_API_KEY` | Remove keys of ineligible users |
 
 ## Key format
@@ -274,7 +274,7 @@ Only keys matching `^([\w-]{1,128})\.([\w-]{43})$` are managed by this service. 
 ## Security notes
 
 - The management key and SSO secrets never reach the browser.
-- Tokens are only returned by authenticated, `no-store` responses and are masked in logs.
+- Keys are only returned by authenticated, `no-store` responses and are masked in logs.
 - The maintenance endpoint uses constant-time comparison and returns 404 when unconfigured.
 - Login fails closed when Keycloak cannot be reached; pruning fails safe (keeps keys).
 - A user whose key was pruned cannot get it back by refreshing the page: `/api/portal` re-checks Keycloak before recreating a missing key.
