@@ -154,7 +154,7 @@ CLIProxyAPI 在同一端口上提供多套兼容协议，页面会把它们都�
    https://cpa-gate.example.com/
    ```
 
-   「同时退出 SSO」按钮会回到这里；未显式配置 `OIDC_POST_LOGOUT_REDIRECT_URI` 时，服务自动取 `OIDC_REDIRECT_URI` 的站点根。
+   「同时退出 SSO 系统」按钮会回到这里；未显式配置 `OIDC_POST_LOGOUT_REDIRECT_URI` 时，服务自动取 `OIDC_REDIRECT_URI` 的站点根。
 5. **Settings → Advanced → Subject Type**：`public`。若为 `pairwise`，`sub` 是每个客户端不同的匿名标识，既不能作为 Key 前缀，也无法用于 Admin API 查询。
 6. **Web origins**：留空即可（所有请求都经本服务同源转发）。
 

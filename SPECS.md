@@ -809,10 +809,10 @@ Authorization: Bearer <key>
 1. 未登录时右上角显示“登录”主按钮。
 2. 点击登录打开弹窗，弹窗内是 SSO 提供商按钮（文案来自 `OIDC_PROVIDER_NAME` 或 i18n 默认值）。
 3. 点击 SSO 按钮跳转 `/api/auth/login`。
-4. 已登录时右上角显示用户名 chip（配置 `OIDC_ACCOUNT_URL` 时可点击）和“退出”按钮。
-5. 点击退出打开弹窗，提供：
-   - 仅退出本服务：`/api/auth/logout`
-   - 同时退出 SSO：`/api/auth/logout?sso=1`
+4. 已登录时右上角显示用户名 chip（配置 `OIDC_ACCOUNT_URL` 时可点击）和“退出登录”按钮。
+5. 点击退出登录打开弹窗，提供：
+   - 仅退出当前服务：`/api/auth/logout`
+   - 同时退出 SSO 系统：`/api/auth/logout?sso=1`
 6. 登录成功后回调到 `/`；失败时回调带 `?login=...`，前端 toast 提示。
 7. 登录态变化时自动关闭不再适用的弹窗。
 
