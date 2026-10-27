@@ -3,11 +3,12 @@
  * 缓存应用外壳（index/css/js/locales/icons）。
  * 策略：同源 GET 网络优先 + 缓存兜底，离线时可打开应用外壳。
  * 升级时修改 CACHE_VERSION 即可全量刷新缓存。 */
-const CACHE_VERSION = 'cpa-shell-v2';
+const CACHE_VERSION = 'cpa-shell-v3';
 const CACHE_NAME = CACHE_VERSION;
 
 const PRECACHE_URLS = [
 	'/index.html',
+	'/theme-init.js',
 	'/css/style.css',
 	'/assets/main-EMSTU7XE.js',
 	'/manifest.webmanifest',

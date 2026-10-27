@@ -698,9 +698,10 @@ Key 创建失败但用户资格正常时：
 | `src/frontend/auth.ts` | 直接复制登录/登出弹窗逻辑，API 路径不变 |
 | `src/utils/session.ts` | 直接复制 |
 | `src/utils/cookie.ts` / `respond.ts` / `mime.ts` / `request.ts` | 直接复制 |
+| `src/utils/security-headers.ts` | 直接复制；`connect-src` 的额外上游源按项目传入（本服务无直连，传空） |
 | `src/service/oidc.ts` | 直接复制 |
 | `src/middleware/session.middleware.ts` | 直接复制 |
-| `src/middleware/trace.middleware.ts` | 直接复制 |
+| `src/middleware/trace.middleware.ts` | 直接复制，并在此调用 `applySecurityHeaders` |
 | `src/controller/frontend.controller.ts` | 直接复制 |
 | `config/esbuild.*.ts` / `config/gen-icons.ts` | 复制并按项目名调整 |
 | `public/manifest.webmanifest` / `sw.js` / 图标 | 复制并按项目名调整 |
@@ -841,6 +842,7 @@ cpa-gate/
 │   ├── favicon.svg
 │   ├── icons/{icon-192,icon-512,maskable-512}.png
 │   ├── manifest.webmanifest
+│   ├── theme-init.js
 │   └── sw.js
 ├── src/
 │   ├── config/config.ts
@@ -1035,7 +1037,12 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
    - 所有 URL 使用 `new URL` 解析。
    - `OIDC_ACCOUNT_URL` 只允许 http/https。
    - 用户组、用户名等外部输入按不可信数据处理。
-8. **撤销**
+8. **响应安全头**
+   - 由 `utils/security-headers.ts` 在 `trace.middleware.ts` 统一附加，覆盖静态资源、`/api` 与错误响应。
+   - `Content-Security-Policy` 保持严格：`script-src 'self'`、`style-src 'self'`，**不使用** `'unsafe-inline'`；首屏主题脚本因此是独立文件 `public/theme-init.js`，`<noscript>` 提示使用 class 而非内联 style。
+   - 另含 `X-Content-Type-Options: nosniff`、`Referrer-Policy`、`X-Frame-Options: DENY`（与 `frame-ancestors 'none'` 双保险）、`Permissions-Policy`。
+   - 不下发 `Strict-Transport-Security`：TLS 由反向代理终止，HSTS 应在代理层统一配置。
+9. **撤销**
    - 登录只控制“新 Key 发放”。
    - 离开用户组后的 Key 依赖自动清理撤销；`PRUNE_INTERVAL=0` 时撤销能力失效，需人工处理。
 
