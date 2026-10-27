@@ -262,7 +262,7 @@ Alert on that second line. It does not need a separate endpoint or an external c
 | `GET` | `/api/auth/status` | — | Session status |
 | `GET` | `/api/auth/login` | — | Redirect to the IdP |
 | `GET` | `/api/auth/callback` | — | OIDC callback |
-| `GET` | `/api/auth/logout` | — | Sign out; `?sso=1` also ends the IdP session |
+| `GET` | `/api/auth/logout` | — | Sign out; `?sso=1` also ends the IdP session. Same-origin only |
 | `GET` | `/api/portal` | Session | Endpoint, API key, models |
 | `POST` | `/api/token/rotate` | Session | Rotate the API key |
 

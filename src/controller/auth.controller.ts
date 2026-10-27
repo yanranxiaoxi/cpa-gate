@@ -5,6 +5,7 @@ import { isEligible } from '../service/keycloak';
 import { ensureUserKey, isValidUserId } from '../service/keys';
 import { buildAuthorizationUrlFromParams, buildEndSessionUrlForLogout, exchangeCodeAtCallback, fetchIdentity, generateOidcParams, oidcEnabled } from '../service/oidc';
 import { parseCookies } from '../utils/cookie';
+import { isSameOriginRequest } from '../utils/csrf';
 import { clearCookie, getSessionUser, redirect, sendJson, setCookie } from '../utils/respond';
 import { signSession, signTransientToken, verifyTransientToken } from '../utils/session';
 import { Controller } from './controller';
@@ -158,6 +159,14 @@ class Auth extends Controller {
 
 	/** GET /api/auth/logout：清除本地会话；?sso=1 时继续跳 IdP 登出（RP-initiated logout） */
 	public async logout(ctx: IContext) {
+		// 登出是 GET：跨站顶层导航同样会携带 SameSite=Lax 的会话 Cookie，
+		// 因此必须确认来源同源，避免任意站点用一个链接把用户踢下线
+		if (!isSameOriginRequest(ctx)) {
+			ctx.logger.warn('rejected cross-site logout request');
+			sendJson(ctx.res, 403, { error: 'cross_site_request_blocked' });
+			return;
+		}
+
 		clearCookie(ctx.res, CONFIG.session.cookieName);
 
 		const url = new URL(ctx.req.url ?? '/', 'http://localhost');

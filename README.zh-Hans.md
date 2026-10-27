@@ -261,7 +261,7 @@ Keycloak 异常（超时、5xx、401/403）时，扫描会**保留**受影响用
 | `GET` | `/api/auth/status` | — | 会话状态 |
 | `GET` | `/api/auth/login` | — | 跳转 IdP |
 | `GET` | `/api/auth/callback` | — | OIDC 回调 |
-| `GET` | `/api/auth/logout` | — | 退出；`?sso=1` 同时结束 IdP 会话 |
+| `GET` | `/api/auth/logout` | — | 退出；`?sso=1` 同时结束 IdP 会话。仅接受同源请求 |
 | `GET` | `/api/portal` | 会话 | 调用地址、API 密钥、模型 |
 | `POST` | `/api/token/rotate` | 会话 | 轮换 API 密钥 |
 

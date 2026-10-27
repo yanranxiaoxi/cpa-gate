@@ -539,7 +539,7 @@ Cookie: cpa_session=...
 | `GET` | `/api/auth/status` | 无 | 登录状态 |
 | `GET` | `/api/auth/login` | 无 | 302 跳转 IdP |
 | `GET` | `/api/auth/callback` | 无 | OIDC 回调 |
-| `GET` | `/api/auth/logout` | 无 | 退出；`?sso=1` 同时退出 IdP |
+| `GET` | `/api/auth/logout` | 无 | 退出；`?sso=1` 同时退出 IdP。仅接受同源请求（见 10.8） |
 
 `GET /api/config` 响应：
 
@@ -699,6 +699,7 @@ Key 创建失败但用户资格正常时：
 | `src/utils/session.ts` | 直接复制 |
 | `src/utils/cookie.ts` / `respond.ts` / `mime.ts` / `request.ts` | 直接复制 |
 | `src/utils/security-headers.ts` | 直接复制；`connect-src` 的额外上游源按项目传入（本服务无直连，传空） |
+| `src/utils/csrf.ts` | 直接复制；用于拒绝跨站登出请求 |
 | `src/service/oidc.ts` | 直接复制 |
 | `src/middleware/session.middleware.ts` | 直接复制 |
 | `src/middleware/trace.middleware.ts` | 直接复制，并在此调用 `applySecurityHeaders` |
@@ -1045,6 +1046,11 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 9. **撤销**
    - 登录只控制“新 Key 发放”。
    - 离开用户组后的 Key 依赖自动清理撤销；`PRUNE_INTERVAL=0` 时撤销能力失效，需人工处理。
+10. **登出的跨站防护**
+    - 登出保留 `GET /api/auth/logout`（便于前端直接跳转，也便于运维手工访问）。
+    - 会话 Cookie 是 `SameSite=Lax`，而 Lax 在**跨站顶层导航**时仍会携带 Cookie，因此必须由服务端确认来源。
+    - 由 `utils/csrf.ts` 的 `isSameOriginRequest()` 逐级判断：`Sec-Fetch-Site`（只接受 `same-origin` / `none`）→ `Origin` 与 `Host` 比对 → `Referer` 与 `Host` 比对；三者皆无时放行（旧浏览器、curl 等无法判断来源）。
+    - 判定为跨站时返回 `403 {"error":"cross_site_request_blocked"}`，**不清除会话**，并记录 warn 日志。
 
 ---
 
