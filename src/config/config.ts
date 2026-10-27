@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -35,6 +36,26 @@ function validatePort(port: string | undefined, defaultPort: number): number {
 
 function validateOptionalEnvVar(value: string | undefined, defaultValue = ''): string {
 	return value || defaultValue;
+}
+
+/** 会话签名密钥的最小字节数：HS256 的强度下限，远高于任何可爆破的口令 */
+const MIN_SESSION_SECRET_BYTES = 32;
+
+/**
+ * 验证会话签名密钥
+ *
+ * 会话是纯 HS256 的 JWT，没有任何其他绑定，密钥是防伪造的唯一屏障，
+ * 因此强制必填且不少于 32 字节；弱密钥可被离线爆破后伪造任意用户身份。
+ */
+function validateSessionSecret(value: string | undefined): string {
+	if (!value) {
+		throw new Error('Required environment variable SESSION_SECRET is not set');
+	}
+	const bytes = Buffer.byteLength(value, 'utf8');
+	if (bytes < MIN_SESSION_SECRET_BYTES) {
+		throw new Error(`Invalid environment variable SESSION_SECRET: at least ${MIN_SESSION_SECRET_BYTES} bytes required, got ${bytes}`);
+	}
+	return value;
 }
 
 function validateNumberEnvVar(name: string, value: string | undefined, defaultValue: number, allowZero = false): number {
@@ -266,7 +287,7 @@ export const CONFIG = {
 	/** 会话配置 */
 	session: {
 		/** 会话签名密钥（必填，建议 32+ 随机字节） */
-		secret: validateEnvVar('SESSION_SECRET', process.env.SESSION_SECRET),
+		secret: validateSessionSecret(process.env.SESSION_SECRET),
 		cookieName: validateOptionalEnvVar(process.env.SESSION_COOKIE_NAME, 'cpa_session'),
 		ttl: validateNumberEnvVar('SESSION_TTL', process.env.SESSION_TTL, 7 * 24 * 60 * 60),
 	},

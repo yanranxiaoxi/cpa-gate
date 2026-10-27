@@ -317,7 +317,7 @@ ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,
 
 | 变量 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `SESSION_SECRET` | 是 | — | 至少 32 字节随机值 |
+| `SESSION_SECRET` | 是 | — | 至少 32 字节随机值；启动时强制校验，缺失或不足直接抛错退出 |
 | `SESSION_COOKIE_NAME` | 否 | `cpa_session` | 会话 Cookie 名 |
 | `SESSION_TTL` | 否 | `604800` | 有效期（秒） |
 
@@ -1025,7 +1025,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 4. **会话**
    - HttpOnly、SameSite=Lax。
    - 生产环境 Secure。
-   - HMAC-SHA256 签名，`SESSION_SECRET` 至少 32 字节。
+   - HMAC-SHA256 签名，`SESSION_SECRET` 至少 32 字节，启动时强制校验（缺失或不足直接退出）。
 5. **OIDC**
    - 授权码流 + PKCE S256。
    - 校验 `state`。

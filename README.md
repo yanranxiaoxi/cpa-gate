@@ -59,7 +59,7 @@ node dist/index.js
 | `SERVER_HOST` | `0.0.0.0` | Listen address |
 | `SERVER_PORT` | `3001` | Listen port |
 | `ENV_PRODUCT` | `development` | `production` enables Secure cookies |
-| `SESSION_SECRET` | — | **Required.** HMAC key for session JWT (32+ random bytes) |
+| `SESSION_SECRET` | — | **Required, at least 32 bytes.** HMAC key for session JWT; a shorter value aborts startup |
 | `SESSION_COOKIE_NAME` | `cpa_session` | Session cookie name |
 | `SESSION_TTL` | `604800` | Session lifetime (seconds) |
 

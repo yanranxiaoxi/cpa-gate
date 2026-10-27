@@ -58,7 +58,7 @@ node dist/index.js
 | `SERVER_HOST` | `0.0.0.0` | 监听地址 |
 | `SERVER_PORT` | `3001` | 监听端口 |
 | `ENV_PRODUCT` | `development` | `production` 时启用 Secure Cookie |
-| `SESSION_SECRET` | — | **必填。** 会话 JWT 的 HMAC 密钥（32+ 随机字节） |
+| `SESSION_SECRET` | — | **必填，至少 32 字节。** 会话 JWT 的 HMAC 密钥；不足 32 字节时启动即失败 |
 | `SESSION_COOKIE_NAME` | `cpa_session` | 会话 Cookie 名 |
 | `SESSION_TTL` | `604800` | 会话有效期（秒） |
 
