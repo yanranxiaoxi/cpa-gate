@@ -1007,7 +1007,8 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 
 - `jose`（会话 JWT）
 - `openid-client`（OIDC）
-- 现有脚手架已包含：`dotenv`、`parameter`、`winston`、`winston-daily-rotate-file`、`formidable`
+- 现有脚手架已包含：`dotenv`、`winston`、`winston-daily-rotate-file`、`formidable`
+- 已移除 `parameter`（2019 年后停更）；控制器基类不再提供参数校验，实际校验都在各控制器内手写
 
 ---
 

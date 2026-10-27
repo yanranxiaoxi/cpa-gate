@@ -1,14 +1,12 @@
-import Parameter from 'parameter';
-
+/**
+ * 控制器基类
+ *
+ * 只负责把原型方法绑定到实例，使方法可以脱离对象被解构调用
+ * （路由层以 `controller.method` 的形式传递处理函数）。
+ */
 export class Controller {
-	private parameter: Parameter;
 	public constructor() {
 		this.bindMethods();
-		this.parameter = new Parameter();
-	}
-
-	public verifyParam(rule: Parameter.ParameterRules, value: any) {
-		return this.parameter.validate(rule, value);
 	}
 
 	private bindMethods() {
