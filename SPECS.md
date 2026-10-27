@@ -203,7 +203,7 @@ flowchart LR
     G -->|管理 API: 读写 api-keys| C[CLIProxyAPI]
     G -->|/v1/models| C
     U -->|使用密钥调用| C
-    A[定时任务 / 运维] -->|POST /api/admin/keys/prune| G
+    G -->|按 PRUNE_INTERVAL 扫描| K
 ```
 
 ### 3.1 运行形态
@@ -307,11 +307,11 @@ ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,
 
 启动时校验：如果 OIDC 已启用但 Keycloak Admin 配置不完整，或两个名单都为空，直接抛错退出，避免出现“能登录但永远拿不到 Key”的隐性故障。
 
-### 4.5 清理接口
+### 4.5 自动清理
 
 | 变量 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `PRUNE_API_KEY` | 否 | 空 | 为空时清理接口返回 404（视为未启用） |
+| `PRUNE_INTERVAL` | 否 | `1800` | 自动清理间隔（秒）；`0` 表示关闭，关闭后失去资格的用户的 Key 不会被撤销 |
 
 ### 4.6 会话
 
@@ -358,7 +358,7 @@ ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,
 ^([A-Za-z0-9_-]{1,128})\.([A-Za-z0-9_-]{43})$
 ```
 
-不匹配的 Key 视为“非本服务管理”，清理接口绝不能删除。
+不匹配的 Key 视为“非本服务管理”，清理过程绝不能删除。
 
 ### 5.3 为什么可以无数据库
 
@@ -454,26 +454,19 @@ Cookie: cpa_session=...
 **顺序要求：先加新、后删旧。** 如果第 3 步失败，不得删除旧 Key。  
 如果第 4 步部分失败，返回错误但新 Key 已可用；运维可再次执行清理或轮换。
 
-### 6.4 清理接口
+### 6.4 自动清理
 
-```http
-POST /api/admin/keys/prune
-X-Admin-Key: <PRUNE_API_KEY>
-```
+服务进程内启动一个定时任务，按 `PRUNE_INTERVAL`（默认 1800 秒）执行 `pruneKeys()`。没有外部 cron，也没有对外暴露的清理接口。
 
-可选：
-
-```http
-POST /api/admin/keys/prune?dryRun=true
-```
+- 首次执行延迟约 45–60 秒（含随机抖动），让服务完成启动并与其它副本错开。
+- 用递归 `setTimeout` 而非 `setInterval`：一轮耗时超过间隔时不会堆积任务。
 
 流程：
 
-1. 校验管理员 Key（常量时间比较）。
-2. 获取 CLIProxyAPI Key 列表。
-3. 仅处理匹配第 5.2 节格式的 Key；其它 Key 原样保留。
-4. 按 `userId` 去重，避免同一用户重复查询 Keycloak。
-5. 对每个用户：
+1. 获取 CLIProxyAPI Key 列表。
+2. 仅处理匹配第 5.2 节格式的 Key；其它 Key 原样保留。
+3. 按 `userId` 去重，避免同一用户重复查询 Keycloak。
+4. 对每个用户：
    - `GET /users/{userId}`：
      - `404` → 删除该用户所有受管 Key。
      - `enabled === false` → 删除。
@@ -485,14 +478,14 @@ POST /api/admin/keys/prune?dryRun=true
    - Keycloak 请求失败（超时、5xx、管理员 Token 获取失败、`401`/`403` 权限不足）→ **保留**，记录错误。
    - 只有 `GET /users/{id}` 明确返回 `404`，或用户组接口成功返回 `200` 且确实无交集时，才删除 Key。
    - `403` 绝不能解释为“用户不在组”，否则服务账号权限配置错误会导致批量误删。
-6. `dryRun=true` 时只统计“将删除”，不实际删除。
-7. 删除使用 `DELETE /v0/management/api-keys?value=<key>`。
-8. 返回统计结果。
+5. 删除使用 `DELETE /v0/management/api-keys?value=<key>`。
+6. 每轮输出一行摘要到日志；`errors` 非空时额外输出一行错误日志，供告警系统捕获（Keycloak 不可用会保留 Key，静默即等于撤销失效）。
 
 **并发控制**
 
 - 服务进程内使用互斥锁串行化 `ensure` / `rotate` / `prune`，防止同一进程内互相覆盖。
-- 清理接口被并发调用时，后到者等待或返回 `409`。规格采用：等待当前任务完成；等待超过 30 秒返回 `409`。
+- 定时任务与用户操作冲突时等待当前任务完成；等待超过 30 秒放弃本轮（下一轮再试）。
+- 多副本部署时锁只在单进程内生效：各副本按各自的间隔扫描，可能重复删除同一枚 Key。若要多副本，需在编排层只让一个副本承担清理，或接受重复删除产生的 `cpa_delete_failed` 噪音。
 
 **响应示例**
 
@@ -522,22 +515,17 @@ POST /api/admin/keys/prune?dryRun=true
 }
 ```
 
-- `key` 字段必须在响应中脱敏（前 8 + 后 4）。
+- `key` 字段必须在日志与统计摘要中脱敏（前 8 + 后 4）。
 - 日志中同样不得出现完整 Key。
 
 ### 6.5 何时执行清理
 
-- 清理是撤销“已离开用户组 / 已被删除用户”的 Key 的唯一手段。
-- 推荐用 cron 定时调用，例如每 5 或 15 分钟：
-
-```bash
-curl -fsS -X POST \
-  -H "X-Admin-Key: $PRUNE_API_KEY" \
-  "https://cpa-gate.example.com/api/admin/keys/prune"
-```
-
+- 清理是撤销“已离开用户组 / 已被删除用户”的 Key 的唯一手段，因此默认开启（`PRUNE_INTERVAL=1800`）。
+- 撤销延迟上界即为一个 `PRUNE_INTERVAL`；调小可缩短窗口，代价是更高的 Keycloak Admin 请求量（每个受管用户 1–2 次）。
 - 登录只保证“新登录用户合格”，不会自动踢掉已持有 Key 的旧用户。
-- 会话过期前，被移出组的用户仍可能访问页面；其 Key 会在下一次清理时被删除。
+- 会话过期前，被移出组的用户仍可能访问页面；`/api/portal` 本身不复核资格（避免每次页面加载都打 Keycloak），其 Key 会在下一轮清理时被删除。
+- `/api/token/rotate` 每次都会实时复核资格，失去资格的用户无法轮换出新 Key。
+- `PRUNE_INTERVAL=0` 关闭清理：此后撤销完全依赖人工，仅建议在排障时临时使用。
 
 ---
 
@@ -674,27 +662,12 @@ Key 创建失败但用户资格正常时：
 
 > 轮换接口必须在响应头设置 `Cache-Control: no-store`。
 
-### 7.3 管理接口
+### 7.3 自动清理（无对外接口）
 
-| 方法 | 路径 | 鉴权 | 说明 |
-| --- | --- | --- | --- |
-| `POST` | `/api/admin/keys/prune` | `PRUNE_API_KEY` | 扫描并删除失效 Key |
+撤销由进程内定时任务完成，**不暴露任何管理端点**：既没有需要保护的管理密钥，也没有可被公网探测的清理接口。
 
-管理员鉴权支持：
-
-```http
-X-Admin-Key: <key>
-```
-
-或：
-
-```http
-Authorization: Bearer <key>
-```
-
-- `PRUNE_API_KEY` 为空：返回 `404`。
-- Key 错误：`401 {"error":"unauthorized"}`。
-- 比较使用 `crypto.timingSafeEqual`，长度不同也按固定时间处理。
+- 间隔由 `PRUNE_INTERVAL` 控制（默认 1800 秒，`0` 关闭）。
+- 每轮输出一行摘要日志；`errors` 非空时额外输出一行错误日志，供告警系统捕获。
 
 ### 7.4 模型列表
 
@@ -874,13 +847,13 @@ cpa-gate/
 │   ├── controller/
 │   │   ├── auth.controller.ts
 │   │   ├── portal.controller.ts
-│   │   ├── admin.controller.ts
 │   │   └── frontend.controller.ts
 │   ├── service/
 │   │   ├── oidc.ts              # 复制自兄弟项目
 │   │   ├── keycloak.ts          # Admin API 客户端 + 资格判断
 │   │   ├── cpa.ts               # CLIProxyAPI 管理/模型客户端
 │   │   ├── keys.ts              # Key 生成、解析、ensure/rotate/prune
+│   │   ├── prune-scheduler.ts   # 进程内定时清理（PRUNE_INTERVAL）
 │   │   └── errors.ts            # 上游错误、锁超时、轮换不完整
 │   ├── middleware/
 │   │   ├── session.middleware.ts
@@ -977,10 +950,12 @@ cpa-gate/
   - 重新调用 `keycloak.isEligible`，不合格拒绝。
   - 执行轮换。
 
-#### `controller/admin.controller.ts`
+#### `service/prune-scheduler.ts`
 
-- `POST /api/admin/keys/prune`
-- 管理员 Key 校验、dry run、统计响应。
+- `startPruneScheduler()`：按 `PRUNE_INTERVAL` 递归 `setTimeout` 执行 `pruneKeys(false)`。
+- 首次执行延迟 45–60 秒（含抖动），避开启动期与多副本同秒。
+- 每轮输出摘要日志；`errors` 非空时输出错误日志供告警。
+- `stopPruneScheduler()` 供优雅退出使用。
 
 ### 9.3 路由
 
@@ -993,8 +968,7 @@ cpa-gate/
 │   ├── /callback                   GET
 │   └── /logout                     GET
 ├── /portal                         GET   (session)
-├── /token/rotate                   POST  (session)
-└── /admin/keys/prune               POST  (admin key)
+└── /token/rotate                   POST  (session)
 ```
 
 其余 GET 路径交给 `frontend.staticFiles`，使用与兄弟项目相同的正则：
@@ -1043,11 +1017,9 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
    - 仅在已认证会话的 `/api/portal` 和轮换响应中返回。
    - 响应头 `Cache-Control: no-store`。
    - 日志中脱敏。
-3. **清理接口**
-   - `PRUNE_API_KEY` 必须为高熵随机值。
-   - 常量时间比较。
-   - 未配置时返回 404，减少攻击面。
-   - 建议在反向代理层限制来源 IP。
+3. **清理调度**
+   - 只在进程内执行，不暴露 HTTP 端点，因此没有需要保护的管理密钥。
+   - 关闭（`PRUNE_INTERVAL=0`）时必须输出警告日志，避免被误当作已启用。
 4. **会话**
    - HttpOnly、SameSite=Lax。
    - 生产环境 Secure。
@@ -1065,7 +1037,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
    - 用户组、用户名等外部输入按不可信数据处理。
 8. **撤销**
    - 登录只控制“新 Key 发放”。
-   - 离开用户组后的 Key 依赖清理接口撤销；运维必须配置定时任务。
+   - 离开用户组后的 Key 依赖自动清理撤销；`PRUNE_INTERVAL=0` 时撤销能力失效，需人工处理。
 
 ---
 
@@ -1127,7 +1099,7 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
   - 保留合格用户 Key
   - 保留非本服务 Key
   - Keycloak 失败时不删除
-  - dryRun 不删除
+  - 调度器按 `PRUNE_INTERVAL` 触发，关闭时不执行
 
 ### 12.3 手工验收
 
@@ -1152,11 +1124,12 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 - [ ] 登录、登出、登录弹窗、登出弹窗流程与兄弟项目一致。
 - [ ] 页面仅包含调用地址、API 密钥、模型列表三块核心信息。
 - [ ] API 密钥支持轮换，轮换后旧密钥失效。
-- [ ] 清理接口可以由环境变量 Key 独立鉴权。
-- [ ] 清理接口能识别已删除用户、禁用用户、离开允许组/用户名单的用户。
+- [ ] 清理由进程内定时任务按 `PRUNE_INTERVAL` 触发，无对外接口。
+- [ ] 清理能识别已删除用户、禁用用户、离开允许组/用户名单的用户。
+- [ ] Keycloak 异常时输出错误日志（供告警），且不删除任何 Key。
 - [ ] `ALLOWED_GROUPS` 与 `ALLOWED_USERS` 取并集，任一命中即可登录。
 - [ ] 登录被拒时页面展示该用户自己的 UUID 并可复制，且 UUID 不出现在 URL 中。
-- [ ] 清理接口不会触碰非本服务创建的 Key。
+- [ ] 清理不会触碰非本服务创建的 Key。
 - [ ] Keycloak 不可用时登录 fail closed、清理 fail safe。
 - [ ] 已被清理的用户无法通过刷新页面重新获得 Key。
 - [ ] 所有日志与错误响应不泄露完整密钥。
@@ -1243,16 +1216,18 @@ KEYCLOAK_ADMIN_CLIENT_ID=cpa-gate-admin
 KEYCLOAK_ADMIN_CLIENT_SECRET=...
 
 SESSION_SECRET=...
-PRUNE_API_KEY=...
+PRUNE_INTERVAL=1800
 ```
 
 ### 14.4 定时清理
 
-```cron
-*/10 * * * * curl -fsS -X POST -H "X-Admin-Key: $PRUNE_API_KEY" https://cpa-gate.example.com/api/admin/keys/prune >/dev/null
+无需外部 cron：服务启动后按 `PRUNE_INTERVAL`（默认 1800 秒）在进程内自动执行。
+
+```env
+PRUNE_INTERVAL=1800
 ```
 
-建议将清理结果接入日志或监控；`errors` 非空时告警。
+将 `[prune] ... errors=N` 与 `[prune] N user(s) could not be verified ...` 两行日志接入监控并告警；后者非空意味着本轮未能完成撤销。
 
 ---
 
@@ -1262,7 +1237,7 @@ PRUNE_API_KEY=...
 2. **上游客户端**：实现 `service/cpa.ts`、`service/keycloak.ts`，先用脚本验证管理 API、模型接口与 Keycloak Admin 权限。
 3. **Key 生命周期**：实现 `service/keys.ts` 与单元测试（解析、ensure、rotate、prune）。
 4. **认证流程**：改造 `auth.controller.ts`，加入用户/用户组资格校验与 Key 创建。
-5. **页面接口**：实现 `/api/config`、`/api/portal`、`/api/token/rotate`、`/api/admin/keys/prune`。
+5. **页面接口**：实现 `/api/config`、`/api/portal`、`/api/token/rotate`，并接入 `service/prune-scheduler.ts`。
 6. **前端**：复制共享 UI/SSO 模块，新增 `portal.ts` 渲染三块信息；补齐 i18n、favicon、manifest。
 7. **构建与部署**：调整 esbuild、Dockerfile、`.env.example`，完成端到端验收。
 
@@ -1297,7 +1272,7 @@ PRUNE_API_KEY=...
 | 被拒时展示 UUID | 5 分钟签名 Cookie，重新登录/登录成功时清除，不入 URL |
 | 登录时 Keycloak 不可用 | 拒绝登录 |
 | 清理时 Keycloak 不可用 | 保留 Key，记录错误 |
-| 清理鉴权 | `PRUNE_API_KEY`，`X-Admin-Key` 或 `Authorization` 请求头（Bearer） |
+| 清理触发 | 进程内定时任务，`PRUNE_INTERVAL`（默认 1800 秒），无对外接口 |
 | 模型来源 | 用户 API 密钥调用 `/v1/models` |
 | 页面 | 顶栏 + 三块信息卡片 + 简洁页脚 |
 | 与兄弟项目关系 | 复制共享 UI/SSO/构建代码，替换项目标识 |

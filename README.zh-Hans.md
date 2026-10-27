@@ -20,15 +20,15 @@
 - **无数据库。** CLIProxyAPI 自己的客户端 Key 列表（`/v0/management/api-keys`）就是唯一数据源。
 - **Key 自描述。** 每枚 Key 都是 `<userId>.<random>`，不需要映射表即可从 Key 反查用户。
 - **SSO 准入。** 发放 Key 前，服务通过 Keycloak Admin API 确认用户仍然存在、已启用，并且在允许的用户组中。
-- **扫描式撤销。** 一个由环境变量 Key 鉴权的运维接口会扫描所有受管 Key，删除已删除用户、已禁用用户、已离开允许组的用户的 Key。
+- **扫描式撤销。** 服务按固定间隔扫描所有受管 Key，删除已删除用户、已禁用用户、已离开允许组的用户的 Key。
 
 ```mermaid
 flowchart LR
     U[用户] -->|OIDC 登录| G[CPA Gate]
     G -->|Admin API| K[Keycloak]
     G -->|Management API| C[CLIProxyAPI]
+    G -->|每 PRUNE_INTERVAL 扫描一次| K
     U -->|密钥| C
-    O[运维 / cron] -->|POST /api/admin/keys/prune| G
 ```
 
 ## 快速开始
@@ -231,23 +231,27 @@ ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,
 
 提示：登录被拒时页面会显示该用户自己的 UUID 并提供复制按钮，用户可直接把它发给你加入名单；已登录用户失去资格时也会显示同一个 ID。
 
-### 运维清理接口
+### 自动撤销
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PRUNE_API_KEY` | 空 | 为空时 `POST /api/admin/keys/prune` 返回 404 |
+| `PRUNE_INTERVAL` | `1800` | 两次扫描之间的秒数；`0` 表示完全关闭扫描 |
 
-```bash
-curl -X POST \
-  -H "X-Admin-Key: $PRUNE_API_KEY" \
-  "https://cpa-gate.example.com/api/admin/keys/prune"
+服务按该间隔扫描所有受管 Key，删除已删除用户、已禁用用户、已离开允许组的用户的 Key。登录只控制新 Key 的发放，撤销完全依赖这个扫描，因此撤销会在一个间隔内生效。
 
-# 预演
-curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
-  "https://cpa-gate.example.com/api/admin/keys/prune?dryRun=true"
+每轮扫描输出一行摘要：
+
+```text
+[prune] scanned=12 managed=10 valid=9 removed=1 errors=0
 ```
 
-建议用 cron 每 10 分钟执行一次。登录只控制新 Key 的发放，撤销完全依赖这个扫描。Keycloak 异常（超时、5xx、401/403）时扫描会**保留** Key，并在 `errors` 中报告。
+Keycloak 异常（超时、5xx、401/403）时，扫描会**保留**受影响用户的 Key，并额外输出一行错误日志——静默跳过用户等于悄悄关掉撤销能力：
+
+```text
+[prune] 2 user(s) could not be verified, their keys were kept: [{"userId":"…","reason":"keycloak_unavailable"}]
+```
+
+建议对第二行做告警。无需额外端点，也不需要外部 cron。
 
 ## API
 
@@ -260,7 +264,6 @@ curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
 | `GET` | `/api/auth/logout` | — | 退出；`?sso=1` 同时结束 IdP 会话 |
 | `GET` | `/api/portal` | 会话 | 调用地址、API 密钥、模型 |
 | `POST` | `/api/token/rotate` | 会话 | 轮换 API 密钥 |
-| `POST` | `/api/admin/keys/prune` | `PRUNE_API_KEY` | 清理不合格用户的 Key |
 
 ## Key 格式
 
@@ -296,7 +299,7 @@ docker run -d --name cpa-gate \
   -e KEYCLOAK_ADMIN_CLIENT_ID='cpa-gate-admin' \
   -e KEYCLOAK_ADMIN_CLIENT_SECRET='…' \
   -e SESSION_SECRET='…' \
-  -e PRUNE_API_KEY='…' \
+  -e PRUNE_INTERVAL=1800 \
   docker.io/yanranxiaoxi/cpa-gate:latest
 ```
 

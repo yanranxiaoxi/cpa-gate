@@ -21,15 +21,15 @@ Users sign in with your existing SSO (OIDC, Keycloak friendly) and receive a per
 - **No database.** CLIProxyAPI's own client key list (`/v0/management/api-keys`) is the single source of truth.
 - **Self-describing keys.** Every key is `<userId>.<random>`, so a key can be traced back to its user without a mapping table.
 - **SSO-gated issuance.** Before issuing a key, the service asks the Keycloak Admin API whether the user still exists, is enabled, and belongs to one of the configured groups.
-- **Revocation by scan.** A key-protected maintenance endpoint scans all managed keys and removes those whose user was deleted, disabled, or moved out of the allowed groups.
+- **Revocation by scan.** The service periodically scans all managed keys and removes those whose user was deleted, disabled, or moved out of the allowed groups.
 
 ```mermaid
 flowchart LR
     U[User] -->|OIDC login| G[CPA Gate]
     G -->|Admin API| K[Keycloak]
     G -->|Management API| C[CLIProxyAPI]
+    G -->|scan every PRUNE_INTERVAL| K
     U -->|API key| C
-    O[Ops / cron] -->|POST /api/admin/keys/prune| G
 ```
 
 ## Quick start
@@ -232,23 +232,27 @@ ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,
 
 Tip: when a user is rejected, the page shows that user's own UUID with a copy button, so they can send it to you for allowlisting. The same ID is shown if a signed-in user loses access.
 
-### Maintenance endpoint
+### Automatic revocation
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PRUNE_API_KEY` | empty | When empty, `POST /api/admin/keys/prune` returns 404 |
+| `PRUNE_INTERVAL` | `1800` | Seconds between scans; `0` disables the scan entirely |
 
-```bash
-curl -X POST \
-  -H "X-Admin-Key: $PRUNE_API_KEY" \
-  "https://cpa-gate.example.com/api/admin/keys/prune"
+The service scans all managed keys on that interval and deletes the ones whose user was deleted, disabled, or moved out of the allowed groups. Keys are only revoked by this scan; signing in only guards new issuance. Revocation therefore takes effect within one interval.
 
-# dry run
-curl -X POST -H "X-Admin-Key: $PRUNE_API_KEY" \
-  "https://cpa-gate.example.com/api/admin/keys/prune?dryRun=true"
+Each scan logs one summary line:
+
+```text
+[prune] scanned=12 managed=10 valid=9 removed=1 errors=0
 ```
 
-Run it from cron frequently, for example every 10 minutes. Keys are only revoked by this scan; login checks only guard new issuance. Keycloak errors (timeout, 5xx, 401/403) make the scan **keep** keys and report them under `errors`.
+Keycloak errors (timeout, 5xx, 401/403) make the scan **keep** the affected keys and surface them as an error line, because silently skipping a user would quietly disable revocation:
+
+```text
+[prune] 2 user(s) could not be verified, their keys were kept: [{"userId":"…","reason":"keycloak_unavailable"}]
+```
+
+Alert on that second line. It does not need a separate endpoint or an external cron job.
 
 ## API
 
@@ -261,7 +265,6 @@ Run it from cron frequently, for example every 10 minutes. Keys are only revoked
 | `GET` | `/api/auth/logout` | — | Sign out; `?sso=1` also ends the IdP session |
 | `GET` | `/api/portal` | Session | Endpoint, API key, models |
 | `POST` | `/api/token/rotate` | Session | Rotate the API key |
-| `POST` | `/api/admin/keys/prune` | `PRUNE_API_KEY` | Remove keys of ineligible users |
 
 ## Key format
 
@@ -297,7 +300,7 @@ docker run -d --name cpa-gate \
   -e KEYCLOAK_ADMIN_CLIENT_ID='cpa-gate-admin' \
   -e KEYCLOAK_ADMIN_CLIENT_SECRET='…' \
   -e SESSION_SECRET='…' \
-  -e PRUNE_API_KEY='…' \
+  -e PRUNE_INTERVAL=1800 \
   docker.io/yanranxiaoxi/cpa-gate:latest
 ```
 

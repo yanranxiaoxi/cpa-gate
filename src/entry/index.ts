@@ -1,5 +1,6 @@
 import { CONFIG } from '../config/config';
 import venRouter from '../router';
+import { startPruneScheduler } from '../service/prune-scheduler';
 import logger from '../utils/logger';
 import { Venation } from '../utils/venation';
 import { VenNodeDriver } from '../utils/venation/driver';
@@ -13,4 +14,7 @@ import { VenNodeDriver } from '../utils/venation/driver';
 	// 启动服务器
 	driver.listen(CONFIG.host, CONFIG.port);
 	logger.info(`Server started on ${CONFIG.host}:${CONFIG.port}`);
+
+	// 定期清理已失去资格的 Key（无数据库设计下撤销完全依赖它）
+	startPruneScheduler();
 })();

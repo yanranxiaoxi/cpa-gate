@@ -1,5 +1,4 @@
 import type { Venation } from '../utils/venation';
-import admin from '../controller/admin.controller';
 import auth from '../controller/auth.controller';
 import frontend from '../controller/frontend.controller';
 import portal from '../controller/portal.controller';
@@ -27,9 +26,6 @@ export default async (ven: Venation) => {
 			// 登录用户页面数据
 			api.get('/portal', portal.portal);
 			api.post('/token/rotate', portal.rotate);
-
-			// 运维清理接口（环境变量 Key 鉴权）
-			api.post('/admin/keys/prune', admin.prune);
 		});
 
 		// ===== 前端页面与静态资源（其余所有 GET）=====

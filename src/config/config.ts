@@ -252,10 +252,15 @@ export const CONFIG = {
 		allowedUsers,
 	},
 
-	/** 清理接口配置 */
-	admin: {
-		/** 为空时清理接口返回 404（视为未启用） */
-		pruneKey: validateOptionalEnvVar(process.env.PRUNE_API_KEY),
+	/** 自动清理配置 */
+	prune: {
+		/**
+		 * 自动清理间隔（秒，0 = 关闭）
+		 *
+		 * 这是撤销「已离开用户组 / 已禁用 / 已删除」用户 Key 的唯一机制，
+		 * 关闭后这些用户会一直保留可用 Key，直到手工清理。
+		 */
+		intervalSeconds: validateNumberEnvVar('PRUNE_INTERVAL', process.env.PRUNE_INTERVAL, 30 * 60, true),
 	},
 
 	/** 会话配置 */
