@@ -5,6 +5,7 @@ import { listModels } from '../service/cpa';
 import { LockTimeoutError, RotateIncompleteError } from '../service/errors';
 import { isEligible } from '../service/keycloak';
 import { ensureUserKey, findUserKey, rotateUserKey } from '../service/keys';
+import { isSameOriginRequest } from '../utils/csrf';
 import { getSessionUser, sendJson } from '../utils/respond';
 import { Controller } from './controller';
 
@@ -149,6 +150,15 @@ class Portal extends Controller {
 			return;
 		}
 		ctx.res.setHeader('Cache-Control', 'no-store');
+
+		// 轮换会让旧密钥立即失效、打断用户所有已配置的客户端，
+		// 因此除了 SameSite=Lax 之外再确认请求来源；浏览器同源 POST 会带
+		// Sec-Fetch-Site: same-origin，正常前端调用不受影响
+		if (!isSameOriginRequest(ctx)) {
+			ctx.logger.warn('rejected cross-site rotate request');
+			sendJson(ctx.res, 403, { error: 'cross_site_request_blocked' });
+			return;
+		}
 
 		const status = await isEligible(user.sub);
 		if (status === 'unavailable') {
