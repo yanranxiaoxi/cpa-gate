@@ -287,6 +287,8 @@ Only keys matching `^([\w-]{1,128})\.([\w-]{43})$` are managed by this service. 
 
 Published image: [`docker.io/yanranxiaoxi/cpa-gate`](https://hub.docker.com/r/yanranxiaoxi/cpa-gate) (`latest` follows the default branch).
 
+The container runs as the unprivileged `node` user; only `./logs` is writable, so mount it if you want the logs to outlive the container.
+
 ```bash
 docker run -d --name cpa-gate \
   -p 3001:3001 \

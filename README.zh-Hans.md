@@ -286,6 +286,8 @@ Keycloak 异常（超时、5xx、401/403）时，扫描会**保留**受影响用
 
 已发布镜像：[`docker.io/yanranxiaoxi/cpa-gate`](https://hub.docker.com/r/yanranxiaoxi/cpa-gate)（`latest` 跟随默认分支）。
 
+容器以非 root 的 `node` 用户运行，只有 `./logs` 可写；需要日志持久化时挂载该目录即可。
+
 ```bash
 docker run -d --name cpa-gate \
   -p 3001:3001 \
