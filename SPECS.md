@@ -1167,7 +1167,26 @@ const STATIC_PATH_REGEX = /(?!\/api(?:\/|$)).*/;
 2. 创建用于 Admin API 的 Client：
    - Service Accounts Enabled
    - 分配 Realm Management 角色：`view-users`、`query-groups`
+   - **分配 `kc-admin-api` client scope（Default 或 Optional）** —— 见下方说明
 3. 记录 `KEYCLOAK_ADMIN_CLIENT_ID` / `SECRET`。
+
+> **Keycloak 26.8.2+ 必做：`kc-admin-api` client scope**
+>
+> 26.8.2 起（CVE-2026-19688）Admin REST API 强制校验 bearer token 的 audience：
+> token 必须带 `kc-admin-api` scope 且 audience 含 realm 的 Admin API 基址，
+> 否则一律返回 `401`。升级后 Keycloak 只为内置客户端
+> （`admin-cli`、`security-admin-console`）自动分配该 scope；
+> **自建的服务账号客户端必须手动分配**，否则本服务的资格校验会全部失败，
+> 表现为页面显示「暂时无法验证账号状态」，日志出现 `GET /users/… returned 401`。
+>
+> 配置路径：Admin Console → Clients → `{KEYCLOAK_ADMIN_CLIENT_ID}` →
+> Client scopes → Add client scope → 选 `kc-admin-api` → 设为 Default。
+>
+> 应急开关（**不推荐**）：服务端启动参数 `--spi-admin--audience-check-enabled=false`
+> 可关闭该检查，但会失去这层防护。
+>
+> 本服务在 401 的日志中会附带 `www-authenticate` 响应头并提示该 scope，
+> 便于快速定位。
 
 ### 14.2 CLIProxyAPI 准备
 

@@ -82,15 +82,37 @@ async function adminRequest(path: string, retry = true): Promise<Response> {
 		throw new UpstreamError('keycloak_unavailable', `GET ${path} failed: ${(ex as Error)?.message ?? ex}`);
 	}
 	if (res.status === 401 && retry) {
+		// 重试前先记下首次 401 的响应头：Keycloak 会用它说明拒绝原因
+		// （例如缺 scope 时带 error="insufficient_scope"），刷新 token 往往无效
+		const firstHeader = res.headers.get('www-authenticate') ?? '';
 		cachedToken = null;
 		await getAdminToken(true);
-		return await adminRequest(path, false);
+		try {
+			return await adminRequest(path, false);
+		}
+		catch (ex) {
+			if (ex instanceof UpstreamError && ex.status === 401) {
+				throw new UpstreamError(
+					ex.code,
+					`${ex.message}${firstHeader ? ` [www-authenticate: ${firstHeader}]` : ''}`,
+					401,
+				);
+			}
+			throw ex;
+		}
 	}
 	if (res.status !== 200 && res.status !== 404) {
 		// 403/5xx 都不能解释为“用户不在组”，统一按不可用处理
+		const wwwAuth = res.headers.get('www-authenticate');
+		// 401 的常见原因是该客户端只被授予了 realm-management 角色，
+		// 却没有分配 kc-admin-api client scope（Keycloak 26.8.2 起强制校验
+		// token 的 audience，缺 scope 时 token 会被 Admin API 拒绝）。
+		const hint = res.status === 401
+			? ' — if the token was freshly issued, assign the kc-admin-api client scope to this client (required since Keycloak 26.8.2)'
+			: '';
 		throw new UpstreamError(
 			res.status === 403 ? 'keycloak_forbidden' : 'keycloak_unavailable',
-			`GET ${path} returned ${res.status}`,
+			`GET ${path} returned ${res.status}${wwwAuth ? ` (${wwwAuth})` : ''}${hint}`,
 			res.status,
 		);
 	}

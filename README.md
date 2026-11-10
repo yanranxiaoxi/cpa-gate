@@ -184,7 +184,11 @@ If CPA Gate sits behind a path-prefixed reverse proxy (e.g. `https://example.com
 4. Open the **Service accounts roles** tab → **Assign role** → filter by client `realm-management` → select
    - `view-users` (read user profile, enabled flag, username and email)
    - `query-groups` (list the groups a user belongs to)
-5. Verify with curl:
+5. **Keycloak 26.8.2 and later: assign the `kc-admin-api` client scope** (missing it breaks sign-in)
+   - **Client scopes** tab → **Add client scope** → tick `kc-admin-api` → **Add** → choose **Default**
+   - Why: since 26.8.2 (CVE-2026-19688) the Admin REST API enforces the token audience — tokens must carry the `kc-admin-api` scope. The upgrade only assigns it to the built-in clients (`admin-cli`, `security-admin-console`); custom service accounts need it manually
+   - Symptom: the page shows "cannot verify account status" and the log shows `GET /users/… returned 401`; this service appends the `www-authenticate` header and hints at the scope
+6. Verify with curl:
 
 ```bash
 curl -s -X POST \
@@ -204,6 +208,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 
 `200` from both means the role assignment is sufficient. A `403` here is exactly what makes the service refuse logins (`?login=unavailable`) and makes pruning keep keys.
+
+If you get `401` instead of `403` for a freshly issued token, the `kc-admin-api` scope from step 5 is most likely missing (Keycloak 26.8.2+).
 
 > Do not grant `realm-admin`, and do not reuse `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`: the login client must stay a public client without admin roles, and the admin client must have no browser flows.
 

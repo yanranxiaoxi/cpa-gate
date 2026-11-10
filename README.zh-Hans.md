@@ -183,7 +183,14 @@ CLIProxyAPI 在同一端口上提供多套兼容协议，页面会把它们都�
 4. 打开 **Service accounts roles** 标签页 → **Assign role** → 按客户端 `realm-management` 筛选 → 勾选
    - `view-users`（读取用户资料、启用状态、用户名与邮箱）
    - `query-groups`（列出用户所属组）
-5. 用 curl 验证凭据：
+5. **Keycloak 26.8.2 及以上：分配 `kc-admin-api` client scope**（漏掉会导致登录失败）
+   - **Client scopes** 标签页 → **Add client scope** → 勾选 `kc-admin-api` → **Add** → 选择 **Default**
+   - 原因：26.8.2 起（CVE-2026-19688）Admin REST API 强制校验 token 的 audience，
+     token 必须带 `kc-admin-api` scope；升级时 Keycloak 只为内置客户端
+     （`admin-cli`、`security-admin-console`）自动分配，自建服务账号需要手动加
+   - 症状：页面显示「暂时无法验证账号状态」，日志出现 `GET /users/… returned 401`；
+     本服务会在该日志中附带 `www-authenticate` 并提示该 scope
+6. 用 curl 验证凭据：
 
 ```bash
 curl -s -X POST \
@@ -203,6 +210,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 
 两条都返回 `200` 才说明角色足够。这里的 `403` 正是导致服务拒绝登录（`?login=unavailable`）、清理时保留 Key 的原因。
+
+若返回 `401` 而不是 `403`，且 token 是刚签发的，多半是第 5 步的 `kc-admin-api` scope 没分配（Keycloak 26.8.2+）。
 
 > 不要授予 `realm-admin`，也不要复用 `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`：登录客户端必须保持 public 且没有管理角色，管理客户端则不应开启任何浏览器流程。
 
