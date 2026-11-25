@@ -41,9 +41,10 @@ function compactSiteText(text: { title: string; subtitle: string; description: s
  * 每项同时给出：
  * - `base`：客户端环境变量应填的值（页面默认展示）
  * - `full`：一个可直接调用的完整接口地址（页面「完整 URL」开关打开后展示）
+ *
+ * @param base - 站点根地址；缺省为 CLIProxyAPI 的调用基址。传入 KeyCordon 地址即可复用同一套路径规则
  */
-function endpoints() {
-	const base = CONFIG.cpa.apiBaseUrl;
+function endpoints(base: string = CONFIG.cpa.apiBaseUrl) {
 	return {
 		/** OpenAI 兼容（OpenAI SDK / Codex CLI） */
 		openai: {
@@ -66,6 +67,24 @@ function endpoints() {
 /** 前端展示的主调用地址（OpenAI 兼容） */
 function callUrl(): string {
 	return endpoints().openai.base;
+}
+
+/**
+ * KeyCordon 集成数据
+ *
+ * 未启用时返回 `undefined`，调用方据此把整个字段从响应里省略——
+ * 前端用「字段是否存在」判断是否渲染开关，不需要额外的布尔位。
+ */
+function keycordonData() {
+	if (!CONFIG.keycordon.enabled) {
+		return undefined;
+	}
+	const kcEndpoints = endpoints(CONFIG.keycordon.url);
+	return {
+		callUrl: kcEndpoints.openai.base,
+		endpoints: kcEndpoints,
+		defaultOn: CONFIG.keycordon.defaultOn,
+	};
 }
 
 /**
@@ -129,6 +148,7 @@ class Portal extends Controller {
 		}
 
 		const models = token ? await listModels(token) : { models: [], unavailable: true };
+		const keycordon = keycordonData();
 
 		sendJson(ctx.res, 200, {
 			eligible,
@@ -140,6 +160,8 @@ class Portal extends Controller {
 			...(tokenError ? { tokenError } : {}),
 			models: models.models,
 			modelsUnavailable: models.unavailable,
+			// 未启用 KeyCordon 时整个字段省略，前端据此决定是否渲染开关
+			...(keycordon ? { keycordon } : {}),
 		});
 	}
 

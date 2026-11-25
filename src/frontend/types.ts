@@ -67,6 +67,18 @@ export interface PortalData {
 	tokenError?: string;
 	models: string[];
 	modelsUnavailable: boolean;
+	/** KeyCordon 集成；服务端未启用时不下发该字段 */
+	keycordon?: KeycordonConfig;
+}
+
+/** KeyCordon 隐私保护集成（服务端未启用时不下发） */
+export interface KeycordonConfig {
+	/** KeyCordon 外部地址的 OpenAI 兼容基址（已含 /v1） */
+	callUrl: string;
+	/** KeyCordon 外部地址的各协议调用地址 */
+	endpoints: Endpoints;
+	/** 开关首次默认状态；用户手动切换后以 localStorage 为准 */
+	defaultOn: boolean;
 }
 
 /** 带业务信息的请求错误 */

@@ -115,6 +115,96 @@ CLIProxyAPI exposes several compatible protocol prefixes on the same port, so th
 
 The first row is the primary "endpoint"; the rest are listed underneath. The **Full URL** switch in that section (off by default) swaps every address from the base URL you put in a client's environment variable to a complete callable path; the choice is stored in `localStorage` and the copy button always copies what is currently displayed. Anthropic deliberately has **no** `/v1` suffix because Claude Code appends `/v1/messages` itself — pointing it at `/v1` would produce `/v1/v1/messages`.
 
+### KeyCordon privacy (optional)
+
+[KeyCordon](https://gitlab.soraharu.com/XiaoXi/keycordon) is a reverse proxy for LLM APIs: before a request leaves the machine it replaces API keys, tokens, private keys and connection-string passwords in the body with placeholders, and restores them in the response. The upstream model never sees the real secrets.
+
+When enabled, the endpoint section gains a **KeyCordon privacy** switch (left of **Full URL**). Turning it on points all three endpoints and the quick-config deep links at KeyCordon; turning it off goes back to the direct addresses.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `KEYCORDON_ENABLED` | `false` | `true` makes `/api/portal` include the KeyCordon addresses and the page render the switch |
+| `KEYCORDON_URL` | — | The **externally reachable** KeyCordon address clients will use, e.g. `https://kc.example.com`. Required when enabled; display-only, the server never connects to it |
+| `KEYCORDON_DEFAULT_ON` | `false` | Initial state of the switch; once the user toggles it, `localStorage` wins |
+
+When disabled, `/api/portal` omits the `keycordon` field entirely and the page is byte-for-byte what it was before the integration.
+
+`KEYCORDON_URL` is only format-checked (must be http/https); reachability is never probed, so a wrong value shows up as "the address copies fine but nothing answers". A loopback value (`localhost` / `127.0.0.1`) logs a warning at startup — clients cannot reach the server's own loopback.
+
+#### Using the `-keycordon` image
+
+The `latest-keycordon` tag runs cpa-gate (3001) and keycordon (8318) in one container, so you do not have to deploy keycordon yourself:
+
+```bash
+docker run -d --name cpa-gate \
+  -p 3001:3001 \
+  -p 127.0.0.1:8318:8318 \
+  -e CPA_MANAGEMENT_URL='http://cliproxyapi:8317' \
+  -e CPA_MANAGEMENT_KEY='…' \
+  -e SESSION_SECRET='…' \
+  -e KEYCORDON_ENABLED=true \
+  -e KEYCORDON_URL='https://kc.example.com' \
+  -e KEYCORDON_MASTER_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" \
+  docker.io/yanranxiaoxi/cpa-gate:latest-keycordon
+```
+
+That image reads two more variables:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `KEYCORDON_UPSTREAM` | `$CPA_MANAGEMENT_URL` | Upstream for the bundled keycordon (reachable from inside the container) |
+| `KEYCORDON_MASTER_KEY` | — | **Required.** Master key, hex or base64 of at least 32 bytes; the container refuses to start without it |
+
+Do not confuse `KEYCORDON_URL` (external, shown to browsers) with `KEYCORDON_UPSTREAM` (internal, used by keycordon).
+
+**Changing the master key invalidates every existing placeholder** and forces the upstream to recompute its prompt cache. Treat it as a long-lived secret.
+
+#### Reverse proxy
+
+You expose 8318 yourself and handle the certificate (optional, your responsibility). Two requirements:
+
+1. **Forward client credentials unchanged**: `Authorization`, `x-api-key`, `x-goog-api-key`, `?key=`, `?auth_token=`. keycordon partitions its vault by them; dropping them makes every client share one vault, so A's placeholders become restorable by B.
+2. **Disable response buffering**: LLM traffic is streamed, and nginx's default buffering makes users think the request hung.
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name kc.example.com;
+
+    # keycordon caps bodies at 8 MiB; nginx defaults to 1 MB and would 413 first
+    client_max_body_size 16m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8318;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header Host $host;
+        # nginx defaults, spelled out so they are not deleted by accident
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Api-Key $http_x_api_key;
+        proxy_set_header X-Goog-Api-Key $http_x_goog_api_key;
+    }
+}
+```
+
+Caddy's defaults are already correct as long as you do not add `request_header -Authorization`:
+
+```text
+kc.example.com {
+    reverse_proxy 127.0.0.1:8318
+}
+```
+
+**Abuse protection is the deployer's job**: 8318 is a new public entry point, so add rate/concurrency limits at the proxy.
+
+#### Rollout and troubleshooting
+
+- To observe before enforcing: mount a config over `/etc/keycordon/config.yaml` and set `mode: observe` (log findings, rewrite nothing), then switch back to `enforce` once you trust the detections.
+- To back out: set `KEYCORDON_DEFAULT_ON=false`; users return to the direct addresses while keycordon keeps logging.
+- Bodies over 8 MiB (e.g. several images in one request) get a 413 and are **not** passed through. Mount a config with a larger `limits.max_body_bytes` if you need it, keeping in mind memory ≈ concurrency × `max_decoded_bytes`.
+- Health: `curl http://127.0.0.1:8318/_keycordon/healthz` returns version, mode and master-key fingerprint (no auth required).
+- If either process exits, the container exits (fail fast), so the switch can never claim to be on while nothing is listening.
+
 ### OIDC
 
 | Variable | Default | Description |
@@ -293,6 +383,13 @@ Only keys matching `^([\w-]{1,128})\.([\w-]{43})$` are managed by this service. 
 
 Published image: [`docker.io/yanranxiaoxi/cpa-gate`](https://hub.docker.com/r/yanranxiaoxi/cpa-gate) (`latest` follows the default branch).
 
+Two tags:
+
+| Tag | Contents |
+| --- | --- |
+| `latest` | cpa-gate only, listening on 3001 |
+| `latest-keycordon` | cpa-gate + keycordon, listening on 3001 and 8318 (see [KeyCordon privacy](#keycordon-privacy-optional)) |
+
 The container runs as the unprivileged `node` user; only `./logs` is writable, so mount it if you want the logs to outlive the container.
 
 ```bash
@@ -324,6 +421,16 @@ docker run -d --name cpa-gate -p 3001:3001 \
 ```
 
 The image is also available from the GitLab registry as `registry.gitlab.soraharu.com/xiaoxi/cpa-gate:latest`. It runs `pnpm install --prod` and copies `dist/` (backend + `public/`). `CPA_MANAGEMENT_URL` defaults to `http://127.0.0.1:8317`; override it when CLIProxyAPI runs in another container.
+
+How the `-keycordon` image is built: CI pulls the newest release (excluding `nightly`) of the `linux_amd64` static binary from [keycordon's package registry](https://gitlab.soraharu.com/XiaoXi/keycordon/-/packages) and bakes it in. That makes the image **not reproducible** — each build may carry a different keycordon version; check the `org.opencontainers.image.keycordon.version` label with `docker inspect` when debugging. To build locally, download the binary first:
+
+```bash
+curl -fL -o keycordon-integration/keycordon-linux-amd64 \
+  "https://gitlab.soraharu.com/api/v4/projects/168/packages/generic/keycordon/<version>/keycordon_<version>_linux_amd64"
+chmod 0755 keycordon-integration/keycordon-linux-amd64
+pnpm build
+docker build -f Dockerfile.keycordon --build-arg KEYCORDON_VERSION=<version> -t cpa-gate:keycordon .
+```
 
 ## Development
 

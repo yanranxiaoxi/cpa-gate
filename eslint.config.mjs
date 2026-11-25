@@ -17,6 +17,7 @@ export default antfu(
 			'.eslintcache',
 			'debug.log',
 			'SPECS.md',
+			'docs/**',
 		],
 	},
 );

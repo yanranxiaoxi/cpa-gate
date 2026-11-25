@@ -39,6 +39,8 @@
 	"endpointGemini": "Gemini 兼容",
 	"fullUrlToggle": "完整 URL",
 	"fullUrlHint": "显示完整的接口路径，而不是客户端基址",
+	"keycordonToggle": "KeyCordon 隐私保护",
+	"keycordonHint": "启用后，上面的调用地址将指向 KeyCordon 代理；发送给模型的请求中的密钥会被替换成占位符",
 	"models": "可用模型",
 	"copy": "复制",
 	"copied": "已复制",

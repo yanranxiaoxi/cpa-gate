@@ -10,7 +10,7 @@ const PRECACHE_URLS = [
 	'/index.html',
 	'/theme-init.js',
 	'/css/style.css',
-	'/assets/main-EMSTU7XE.js',
+	'/assets/main-4BQ6ZLOT.js',
 	'/manifest.webmanifest',
 	'/favicon.svg',
 	'/locales/en.json',

@@ -358,6 +358,14 @@ main.container {
 	margin-left: auto;
 }
 
+/* 多个开关并排；窄屏时整组换到独立一行（见文件末尾的媒体查询） */
+.switch-group {
+	display: inline-flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+
 /* ===== 开关 ===== */
 .switch {
 	display: inline-flex;
@@ -785,6 +793,16 @@ body.modal-open {
 		align-items: stretch;
 		padding-top: 10px;
 		padding-bottom: 10px;
+	}
+
+	/* 两个开关在窄屏放不下，整组独占一行并靠左 */
+	.portal-label-extra {
+		flex-basis: 100%;
+		margin-left: 0;
+	}
+
+	.switch-group {
+		justify-content: flex-start;
 	}
 
 	.topbar-actions {

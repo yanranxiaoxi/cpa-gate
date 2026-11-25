@@ -39,6 +39,8 @@
 	"endpointGemini": "Gemini compatible",
 	"fullUrlToggle": "Full URL",
 	"fullUrlHint": "Show the complete API path instead of the base URL",
+	"keycordonToggle": "KeyCordon privacy",
+	"keycordonHint": "When on, the endpoints above point at the KeyCordon proxy, which replaces secrets in requests with placeholders",
 	"models": "Available models",
 	"copy": "Copy",
 	"copied": "Copied",

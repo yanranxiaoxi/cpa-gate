@@ -114,6 +114,96 @@ CLIProxyAPI 在同一端口上提供多套兼容协议，页面会把它们都�
 
 第一条是主「调用地址」，其余列在下方。该区块右上角的 **完整 URL** 开关（默认关闭）会把所有地址从「客户端环境变量该填的基址」切换为「可直接调用的完整接口路径」；选择保存在 `localStorage`，复制按钮始终复制当前显示的内容。Anthropic 那条**故意不带** `/v1`：Claude Code 自己会追加 `/v1/messages`，若填成 `/v1` 就会变成 `/v1/v1/messages`。
 
+### KeyCordon 隐私保护（可选）
+
+[KeyCordon](https://gitlab.soraharu.com/XiaoXi/keycordon) 是一个面向 LLM API 的反向代理：请求离开本机前，它把请求体里的 API key、令牌、私钥、连接串密码替换成占位符，响应返回客户端前再还原。上游模型始终看不到原始密钥。
+
+启用后，页面「调用地址」右上角会多出一个 **KeyCordon 隐私保护** 开关（在「完整 URL」左侧）。打开时三条调用地址与「快速配置」的 Deep Link 全部切换到 KeyCordon 地址；关闭时回到直连地址。
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `KEYCORDON_ENABLED` | `false` | `true` 时启用集成：`/api/portal` 下发 KeyCordon 地址，页面显示开关 |
+| `KEYCORDON_URL` | — | KeyCordon 的**外部暴露地址**（客户端实际访问的地址），如 `https://kc.example.com`。启用时必填，仅用于展示，服务端不会去连接它 |
+| `KEYCORDON_DEFAULT_ON` | `false` | 开关的**首次**默认状态；用户手动切换后以浏览器 `localStorage` 为准 |
+
+未启用时 `/api/portal` 完全不下发 `keycordon` 字段，页面与未集成时一模一样。
+
+`KEYCORDON_URL` 只做格式校验（必须是 http/https），不会探测可达性；配错的表现是「地址能复制但连不上」。填回环地址（`localhost` / `127.0.0.1`）时启动日志会告警——客户端访问不到服务端视角的回环地址。
+
+#### 使用 `-keycordon` 镜像
+
+`latest-keycordon` 标签在同一个容器里同时运行 cpa-gate（3001）与 keycordon（8318），无需自己部署 keycordon：
+
+```bash
+docker run -d --name cpa-gate \
+  -p 3001:3001 \
+  -p 127.0.0.1:8318:8318 \
+  -e CPA_MANAGEMENT_URL='http://cliproxyapi:8317' \
+  -e CPA_MANAGEMENT_KEY='…' \
+  -e SESSION_SECRET='…' \
+  -e KEYCORDON_ENABLED=true \
+  -e KEYCORDON_URL='https://kc.example.com' \
+  -e KEYCORDON_MASTER_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" \
+  docker.io/yanranxiaoxi/cpa-gate:latest-keycordon
+```
+
+该镜像额外读取两个变量：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `KEYCORDON_UPSTREAM` | `$CPA_MANAGEMENT_URL` | 打包进来的 keycordon 的上游地址（容器内可达地址） |
+| `KEYCORDON_MASTER_KEY` | — | **必填**。主密钥，hex 或 base64 的至少 32 字节；缺失时容器拒绝启动 |
+
+注意区分 `KEYCORDON_URL`（外部地址，给浏览器看）与 `KEYCORDON_UPSTREAM`（容器内地址，给 keycordon 用）。
+
+**主密钥一旦更换，所有历史占位符失效**，上游 prompt cache 会重算一次。请把它当作长期机密保存。
+
+#### 反向代理
+
+8318 需要你自己暴露并配置证书（证书可选，由你负责）。反向代理必须满足两点：
+
+1. **原样转发客户端凭据**：`Authorization`、`x-api-key`、`x-goog-api-key`、`?key=`、`?auth_token=`。keycordon 用它们划分 vault；丢失凭据会让不同客户端共用一个 vault，A 的占位符可以被 B 还原。
+2. **关闭响应缓冲**：LLM 都是流式响应，nginx 默认缓冲会让用户以为「卡住了」。
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name kc.example.com;
+
+    # keycordon 默认 body 上限 8 MiB；nginx 默认只有 1 MB，会先触发 413
+    client_max_body_size 16m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8318;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header Host $host;
+        # 以下三行是 nginx 默认值，显式写出以防误删
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Api-Key $http_x_api_key;
+        proxy_set_header X-Goog-Api-Key $http_x_goog_api_key;
+    }
+}
+```
+
+Caddy 的默认行为就是正确的，只要不加 `request_header -Authorization`：
+
+```text
+kc.example.com {
+    reverse_proxy 127.0.0.1:8318
+}
+```
+
+**防滥用由部署者负责**：8318 是新增的公网入口，请在反向代理层加速率/并发限制。
+
+#### 灰度与排障
+
+- 想先观察再启用：挂载自定义配置覆盖 `/etc/keycordon/config.yaml`，把 `mode` 改成 `observe`（只记录命中、不改写），确认无误报后再改回 `enforce`。
+- 出问题时把 `KEYCORDON_DEFAULT_ON` 设为 `false`，用户回到直连地址，keycordon 继续保留日志。
+- 请求体超过 8 MiB（例如一次带多张图片）会返回 413 且**不透传**；需要时挂载配置调大 `limits.max_body_bytes`，并注意「内存 ≈ 并发数 × `max_decoded_bytes`」。
+- 健康检查：`curl http://127.0.0.1:8318/_keycordon/healthz` 返回版本、模式与主密钥指纹（免鉴权）。
+- 任一进程退出，容器整体退出（fail fast），避免「开关显示已启用但实际没生效」。
+
 ### OIDC
 
 | 变量 | 默认值 | 说明 |
@@ -295,6 +385,13 @@ Keycloak 异常（超时、5xx、401/403）时，扫描会**保留**受影响用
 
 已发布镜像：[`docker.io/yanranxiaoxi/cpa-gate`](https://hub.docker.com/r/yanranxiaoxi/cpa-gate)（`latest` 跟随默认分支）。
 
+两个标签：
+
+| 标签 | 内容 |
+| --- | --- |
+| `latest` | 只有 cpa-gate，监听 3001 |
+| `latest-keycordon` | cpa-gate + keycordon，监听 3001 与 8318（见 [KeyCordon 隐私保护](#keycordon-隐私保护可选)） |
+
 容器以非 root 的 `node` 用户运行，只有 `./logs` 可写；需要日志持久化时挂载该目录即可。
 
 ```bash
@@ -326,6 +423,16 @@ docker run -d --name cpa-gate -p 3001:3001 \
 ```
 
 镜像同时发布在 GitLab 私有仓库：`registry.gitlab.soraharu.com/xiaoxi/cpa-gate:latest`。镜像内执行 `pnpm install --prod`，并复制 `dist/`（后端 + `public/`）。`CPA_MANAGEMENT_URL` 默认是 `http://127.0.0.1:8317`，CLIProxyAPI 在其它容器时需覆盖。
+
+`-keycordon` 镜像的构建方式：CI 从 [keycordon 的软件包仓库](https://gitlab.soraharu.com/XiaoXi/keycordon/-/packages) 取最新的发布版本（排除 `nightly`）的 `linux_amd64` 静态二进制，打进镜像。因此该镜像**不可复现**——每次构建可能带上不同的 keycordon 版本；排障时用 `docker inspect` 看 `org.opencontainers.image.keycordon.version` 标签。本地构建需要先手动下载二进制：
+
+```bash
+curl -fL -o keycordon-integration/keycordon-linux-amd64 \
+  "https://gitlab.soraharu.com/api/v4/projects/168/packages/generic/keycordon/<版本>/keycordon_<版本>_linux_amd64"
+chmod 0755 keycordon-integration/keycordon-linux-amd64
+pnpm build
+docker build -f Dockerfile.keycordon --build-arg KEYCORDON_VERSION=<版本> -t cpa-gate:keycordon .
+```
 
 ## 开发
 

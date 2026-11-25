@@ -1,4 +1,4 @@
-import type { DeniedInfo, PortalData } from './types';
+import type { DeniedInfo, PortalData, ProtocolEndpoint } from './types';
 import { getSiteTitle, loadPortal } from './api';
 import { closeModal, openLoginModal, openModal } from './auth';
 import { t } from './i18n';
@@ -13,6 +13,9 @@ export interface PortalHandlers {
 /** 「完整 URL」开关的 localStorage 键 */
 const FULL_URL_KEY = 'cpa-full-url';
 
+/** 「KeyCordon 隐私保护」开关的 localStorage 键 */
+const KEYCORDON_KEY = 'cpa-keycordon';
+
 /**
  * 是否展示完整接口地址
  *
@@ -20,6 +23,14 @@ const FULL_URL_KEY = 'cpa-full-url';
  * 打开：显示可直接调用的完整接口地址，如 `https://cpa.example.com/v1/chat/completions`
  */
 let showFullUrl = readFullUrlPreference();
+
+/**
+ * 是否把调用地址切换到 KeyCordon
+ *
+ * `null` 表示用户从未选择过，此时采用服务端下发的 `defaultOn`；
+ * 一旦用户手动切换过，就以 localStorage 为准（环境变量只作首次默认值）。
+ */
+let useKeycordon: boolean | null = readKeycordonPreference();
 
 /** 安全读取开关偏好（隐私模式下 localStorage 可能抛错） */
 function readFullUrlPreference(): boolean {
@@ -46,28 +57,86 @@ function currentUrl(base: string, full: string): string {
 	return showFullUrl ? full : base;
 }
 
+/** 安全读取 KeyCordon 开关偏好；`null` 表示用户从未选择过 */
+function readKeycordonPreference(): boolean | null {
+	try {
+		const raw = localStorage.getItem(KEYCORDON_KEY);
+		return raw === '1' ? true : raw === '0' ? false : null;
+	}
+	catch {
+		return null;
+	}
+}
+
+/** 持久化 KeyCordon 开关偏好 */
+function saveKeycordonPreference(value: boolean): void {
+	try {
+		localStorage.setItem(KEYCORDON_KEY, value ? '1' : '0');
+	}
+	catch {
+		// 忽略
+	}
+}
+
+/**
+ * 定下本次渲染使用的 KeyCordon 开关状态
+ *
+ * 用户从未选择过时采用服务端下发的 `defaultOn`；服务端未启用集成时恒为关闭。
+ */
+function resolveKeycordon(data: PortalData): boolean {
+	if (!data.keycordon) {
+		useKeycordon = false;
+		return false;
+	}
+	if (useKeycordon === null) {
+		useKeycordon = data.keycordon.defaultOn;
+	}
+	return useKeycordon;
+}
+
 /**
  * 生成一个可切换显示形态的 URL 元素
  *
- * `data-base` / `data-full` 同时保存两种形态，切换开关时只改文本、不重建 DOM；
- * 复制按钮在点击时读取当前文本，因此复制的就是屏幕上看到的地址。
+ * 四个 `data-*` 保存「直连 / KeyCordon」×「基址 / 完整路径」的全部组合，
+ * 切换开关时只改文本、不重建 DOM；复制按钮在点击时读取当前文本，
+ * 因此复制的就是屏幕上看到的地址。
+ *
+ * @param base - 直连的基址
+ * @param full - 直连的完整接口地址
+ * @param className - 附加到 `code` 元素上的样式类
+ * @param alt - KeyCordon 对应的同一协议地址；未启用集成时省略
  */
-function urlCode(base: string, full: string, className: string): HTMLElement {
+function urlCode(base: string, full: string, className: string, alt?: ProtocolEndpoint): HTMLElement {
 	return el('code', {
 		'class': `${className} mono url-value`,
 		'data-base': base,
 		'data-full': full,
+		'data-kc-base': alt?.base ?? '',
+		'data-kc-full': alt?.full ?? '',
 	}, [currentUrl(base, full)]);
 }
 
-/** 就地刷新所有 URL 元素的显示形态 */
-function applyFullUrl(): void {
+/** 一个地址元素在「两个开关」下的最终文本；缺少必要数据时返回 null */
+function resolveUrlText(node: HTMLElement, kc: boolean): string | null {
+	const { base, full, kcBase, kcFull } = node.dataset;
+	const chosenBase = kc && kcBase ? kcBase : base;
+	const chosenFull = kc && kcFull ? kcFull : full;
+	if (!chosenBase || !chosenFull) {
+		return null;
+	}
+	return currentUrl(chosenBase, chosenFull);
+}
+
+/** 就地刷新所有 URL 元素与快速配置链接 */
+function applyUrls(): void {
+	const kc = useKeycordon === true;
 	for (const node of document.querySelectorAll<HTMLElement>('.url-value')) {
-		const { base, full } = node.dataset;
-		if (base && full) {
-			node.textContent = currentUrl(base, full);
+		const text = resolveUrlText(node, kc);
+		if (text !== null) {
+			node.textContent = text;
 		}
 	}
+	applyQuickConfigHrefs(kc);
 }
 
 /** 「完整 URL」开关 */
@@ -77,12 +146,28 @@ function fullUrlSwitch(): HTMLElement {
 	input.addEventListener('change', () => {
 		showFullUrl = input.checked;
 		saveFullUrlPreference(showFullUrl);
-		applyFullUrl();
+		applyUrls();
 	});
 	return el('label', { class: 'switch', title: t('fullUrlHint') }, [
 		input,
 		el('span', { class: 'switch-track' }),
 		el('span', { class: 'switch-text' }, [t('fullUrlToggle')]),
+	]);
+}
+
+/** 「KeyCordon 隐私保护」开关（仅在后端下发 keycordon 字段时渲染） */
+function keycordonSwitch(): HTMLElement {
+	const input = el('input', { class: 'switch-input', type: 'checkbox' }) as HTMLInputElement;
+	input.checked = useKeycordon === true;
+	input.addEventListener('change', () => {
+		useKeycordon = input.checked;
+		saveKeycordonPreference(useKeycordon);
+		applyUrls();
+	});
+	return el('label', { class: 'switch', title: t('keycordonHint') }, [
+		input,
+		el('span', { class: 'switch-track' }),
+		el('span', { class: 'switch-text' }, [t('keycordonToggle')]),
 	]);
 }
 
@@ -145,14 +230,14 @@ function modelChip(model: string): HTMLButtonElement {
 }
 
 /** 一项兼容地址：协议名 + 用途 + 值 + 复制 */
-function endpointRow(label: string, hint: string, base: string, full: string): HTMLElement {
+function endpointRow(label: string, hint: string, base: string, full: string, alt?: ProtocolEndpoint): HTMLElement {
 	const row = el('div', { class: 'endpoint-item' });
 	const meta = el('div', { class: 'endpoint-meta' });
 	meta.append(
 		el('span', { class: 'endpoint-name' }, [label]),
 		el('span', { class: 'endpoint-hint dim mono' }, [hint]),
 	);
-	const code = urlCode(base, full, 'endpoint-value');
+	const code = urlCode(base, full, 'endpoint-value', alt);
 	row.append(meta, code, copyUrlButton(code));
 	return row;
 }
@@ -179,17 +264,31 @@ function section(
 	return wrapper;
 }
 
-/** 调用地址区块：主地址 + 完整路径开关 + 其它兼容地址 */
+/** 调用地址区块：主地址 + 两个开关 + 其它兼容地址 */
 function callSection(data: PortalData): HTMLElement {
+	const kc = data.keycordon?.endpoints;
 	const wrapper = el('div', { class: 'portal-section' });
+
+	// 两个开关放在同一容器里，窄屏时整组换到独立一行
+	const switches = el('div', { class: 'portal-label-extra switch-group' });
+	if (data.keycordon) {
+		switches.append(keycordonSwitch());
+	}
+	switches.append(fullUrlSwitch());
+
 	const head = el('div', { class: 'portal-label' }, [
 		t('callUrl'),
 		el('span', { class: 'portal-hint mono' }, ['OPENAI_BASE_URL']),
-		el('span', { class: 'portal-label-extra' }, [fullUrlSwitch()]),
+		switches,
 	]);
 
 	const row = el('div', { class: 'portal-row' });
-	const code = urlCode(data.callUrl, data.endpoints?.openai.full ?? data.callUrl, 'portal-value');
+	const code = urlCode(
+		data.callUrl,
+		data.endpoints?.openai.full ?? data.callUrl,
+		'portal-value',
+		kc?.openai,
+	);
 	row.append(code, copyUrlButton(code));
 	wrapper.append(head, row);
 
@@ -198,8 +297,8 @@ function callSection(data: PortalData): HTMLElement {
 		const extras = el('div', { class: 'endpoint-list' });
 		extras.append(el('div', { class: 'endpoint-list-label' }, [t('otherEndpoints')]));
 		extras.append(
-			endpointRow(t('endpointAnthropic'), 'ANTHROPIC_BASE_URL', data.endpoints.anthropic.base, data.endpoints.anthropic.full),
-			endpointRow(t('endpointGemini'), 'GOOGLE_GEMINI_BASE_URL', data.endpoints.gemini.base, data.endpoints.gemini.full),
+			endpointRow(t('endpointAnthropic'), 'ANTHROPIC_BASE_URL', data.endpoints.anthropic.base, data.endpoints.anthropic.full, kc?.anthropic),
+			endpointRow(t('endpointGemini'), 'GOOGLE_GEMINI_BASE_URL', data.endpoints.gemini.base, data.endpoints.gemini.full, kc?.gemini),
 		);
 		wrapper.append(extras);
 	}
@@ -321,24 +420,35 @@ function quickConfigSection(data: PortalData): HTMLElement {
 	const head = el('div', { class: 'portal-label' }, [t('quickConfig')]);
 	const row = el('div', { class: 'portal-row quick-config-row' });
 
-	const providerId = parseProviderIdFromBaseUrl(data.endpoints?.anthropic.base || data.callUrl);
 	const siteName = getSiteTitle();
 	const apiKey = data.token ?? '';
+	const kcBase = data.keycordon?.callUrl;
+
+	// 提供商标识符取自域名，两组地址必须各算一次（域名不同 → 客户端里是两个独立条目）
+	const providerId = parseProviderIdFromBaseUrl(data.endpoints?.anthropic.base || data.callUrl);
+	const kcProviderId = kcBase ? parseProviderIdFromBaseUrl(kcBase) : '';
 
 	const tools = [
 		{
 			name: 'Cherry Studio',
 			url: buildCherryStudioUrl({ id: providerId, name: siteName, baseUrl: data.callUrl, apiKey }),
+			urlKc: kcBase
+				? buildCherryStudioUrl({ id: kcProviderId, name: siteName, baseUrl: kcBase, apiKey })
+				: '',
 			hint: t('cherryStudioHint'),
 		},
 		{
 			name: 'Chatbox',
 			url: buildChatboxUrl({ id: providerId, name: siteName, callUrl: data.callUrl, apiKey }),
+			urlKc: kcBase
+				? buildChatboxUrl({ id: kcProviderId, name: siteName, callUrl: kcBase, apiKey })
+				: '',
 			hint: t('chatboxHint'),
 		},
 		{
 			name: 'OpenCat',
 			url: buildOpenCatUrl({ baseUrl: data.callUrl, apiKey }),
+			urlKc: kcBase ? buildOpenCatUrl({ baseUrl: kcBase, apiKey }) : '',
 			hint: t('openCatHint'),
 		},
 	];
@@ -347,6 +457,8 @@ function quickConfigSection(data: PortalData): HTMLElement {
 		const btn = el('a', {
 			'class': 'btn small ghost quick-config-btn',
 			'href': tool.url,
+			'data-href': tool.url,
+			'data-href-kc': tool.urlKc,
 			'target': '_blank',
 			'rel': 'noopener noreferrer',
 			'title': tool.hint,
@@ -357,6 +469,14 @@ function quickConfigSection(data: PortalData): HTMLElement {
 
 	wrapper.append(head, row);
 	return wrapper;
+}
+
+/** 切换快速配置链接；未提供 KeyCordon 版本时保持直连 */
+function applyQuickConfigHrefs(kc: boolean): void {
+	for (const link of document.querySelectorAll<HTMLAnchorElement>('a[data-href]')) {
+		const { href, hrefKc } = link.dataset;
+		link.href = kc && hrefKc ? hrefKc : href ?? link.href;
+	}
 }
 
 /** 轮换确认弹窗 */
@@ -422,6 +542,9 @@ export function renderPortal(container: HTMLElement, data: PortalData, handlers:
 		});
 	});
 
+	// 先定下开关状态，再构建节点：开关的初始勾选状态依赖它
+	resolveKeycordon(data);
+
 	card.append(
 		callSection(data),
 		section(t('personalToken'), data.token, [copyButton(data.token), rotate]),
@@ -445,6 +568,9 @@ export function renderPortal(container: HTMLElement, data: PortalData, handlers:
 	card.append(modelSection);
 
 	container.replaceChildren(card);
+
+	// 必须在节点入树之后：querySelectorAll 看不到游离节点
+	applyUrls();
 }
 
 /** 加载中 */

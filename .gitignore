@@ -8,3 +8,5 @@
 /public/assets/
 .eslintcache
 debug.log
+# 构建 -keycordon 镜像时由 CI 下载的静态二进制，不入版本库
+/keycordon-integration/keycordon-linux-amd64

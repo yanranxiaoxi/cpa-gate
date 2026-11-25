@@ -1,0 +1,42 @@
+FROM docker.io/library/node:24-alpine
+LABEL maintainer="XiaoXi <admin@soraharu.com>"
+ENV ENV_PRODUCT=true
+ENV SERVER_HOST=0.0.0.0
+ENV SERVER_PORT=3001
+ENV LOG_LEVEL=info
+ENV PROJECT_NAME=cpa-gate
+# CLIProxyAPI 默认端口；跨容器部署时用 -e CPA_MANAGEMENT_URL=... 覆盖
+ENV CPA_MANAGEMENT_URL=http://127.0.0.1:8317
+WORKDIR /home/node/app
+# 安装生产依赖（后端以 ESM 方式 external 这些运行时依赖，由 Node 直接加载）
+# 显式指定 pnpm 版本，避免 corepack 解析偏差
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable && corepack prepare pnpm@11.7.0 --activate && pnpm install --prod --frozen-lockfile
+# dist/ 内含 index.js（后端）与 public/（前端静态资源）
+COPY ./dist/ ./
+# 只把日志目录交给非 root 用户：应用代码保持 root 所有，
+# 即使出现文件写入类缺陷也无法改写 index.js 在容器内持久化
+RUN mkdir -p ./logs && chown node:node ./logs
+
+# tini 作为 PID 1：回收僵尸进程，并把信号转给整个进程组
+RUN apk add --no-cache tini
+
+# keycordon：构建期由 CI 从软件包仓库下载的静态二进制（CGO_ENABLED=0）
+ARG KEYCORDON_VERSION=unknown
+LABEL org.opencontainers.image.keycordon.version=$KEYCORDON_VERSION
+COPY --chmod=0755 keycordon-integration/keycordon-linux-amd64 /usr/local/bin/keycordon
+COPY keycordon-integration/config.yaml /etc/keycordon/config.yaml
+COPY --chmod=0755 keycordon-integration/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# 该镜像默认启用集成：忘记设置 KEYCORDON_URL 会在启动时立刻失败（fail fast）
+ENV KEYCORDON_ENABLED=true
+
+# 以非 root 运行：任何文件写入类缺陷都不再等同于容器内 root 权限
+USER node
+EXPOSE 3001/tcp
+EXPOSE 8318/tcp
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -q -O- http://127.0.0.1:3001/api/config >/dev/null \
+   && wget -q -O- http://127.0.0.1:8318/_keycordon/healthz >/dev/null \
+   || exit 1
+ENTRYPOINT [ "/sbin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh" ]

@@ -38,6 +38,11 @@ function validateOptionalEnvVar(value: string | undefined, defaultValue = ''): s
 	return value || defaultValue;
 }
 
+/** 布尔型环境变量：`true` / `1` 视为开启，其余一律关闭 */
+function envFlag(name: string): boolean {
+	return process.env[name] === 'true' || process.env[name] === '1';
+}
+
 /** 会话签名密钥的最小字节数：HS256 的强度下限，远高于任何可爆破的口令 */
 const MIN_SESSION_SECRET_BYTES = 32;
 
@@ -183,6 +188,52 @@ function resolveKeycloakFromIssuer(): { baseUrl: string; realm: string } {
 	}
 }
 
+/**
+ * 判断 URL 是否指向本机回环地址
+ *
+ * 客户端无法访问服务端视角的回环地址，因此这类配置几乎总是错的；
+ * 但容器编排里可能出现自引用域名，所以只告警、不阻止启动。
+ */
+export function isLoopbackUrl(rawUrl: string): boolean {
+	try {
+		const { hostname } = new URL(rawUrl);
+		const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+		return host === 'localhost'
+			|| host === '::1'
+			|| /^127\./.test(host);
+	}
+	catch {
+		return false;
+	}
+}
+
+/**
+ * KeyCordon 集成配置
+ *
+ * 只在 `KEYCORDON_ENABLED` 为真时校验地址：未启用时允许留空，
+ * 这样基础镜像的用户完全不需要关心这三个变量。
+ */
+function resolveKeycordon(): { enabled: boolean; url: string; defaultOn: boolean } {
+	const enabled = envFlag('KEYCORDON_ENABLED');
+	const defaultOn = envFlag('KEYCORDON_DEFAULT_ON');
+	if (!enabled) {
+		return { enabled: false, url: '', defaultOn };
+	}
+
+	const url = trimSlash(validateEnvVar('KEYCORDON_URL', process.env.KEYCORDON_URL));
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	}
+	catch {
+		throw new Error(`Invalid environment variable KEYCORDON_URL: not a valid URL: ${url}`);
+	}
+	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+		throw new Error(`Invalid environment variable KEYCORDON_URL: only http/https allowed, got ${parsed.protocol}`);
+	}
+	return { enabled, url, defaultOn };
+}
+
 const managementUrl = trimSlash(validateEnvVar('CPA_MANAGEMENT_URL', process.env.CPA_MANAGEMENT_URL));
 const managementKey = validateOptionalEnvVar(process.env.CPA_MANAGEMENT_KEY);
 const apiBaseUrl = trimSlash(validateOptionalEnvVar(process.env.CPA_API_BASE_URL, managementUrl));
@@ -283,6 +334,9 @@ export const CONFIG = {
 		 */
 		intervalSeconds: validateNumberEnvVar('PRUNE_INTERVAL', process.env.PRUNE_INTERVAL, 30 * 60, true),
 	},
+
+	/** KeyCordon 隐私保护集成（未启用时页面与接口完全不变） */
+	keycordon: resolveKeycordon(),
 
 	/** 会话配置 */
 	session: {

@@ -1,0 +1,24 @@
+# 打包进 -keycordon 镜像的 keycordon 配置。
+# 上游由 entrypoint.sh 通过 -upstream 传入（KEYCORDON_UPSTREAM 或 CPA_MANAGEMENT_URL）。
+#
+# 只写需要偏离默认值的项：其余交给 keycordon 自己的默认值，
+# 避免上游升级后这里的副本变成过时的「假默认值」。
+
+# 容器内必须监听 0.0.0.0，否则宿主与其它容器都连不上
+listen: 0.0.0.0:8318
+
+mode: enforce
+
+vault:
+  # 主密钥只从环境变量读取：容器内没有持久卷，file 模式每次重启都会重新生成，
+  # 导致历史占位符全部失效并让上游 prompt cache 重算
+  master_key_scope: env
+  master_key_env: KEYCORDON_MASTER_KEY
+
+caller:
+  # 监听 0.0.0.0 时要求请求带凭据，否则所有匿名客户端共用一个 vault
+  require_on_non_loopback: true
+
+log:
+  level: info
+  format: json

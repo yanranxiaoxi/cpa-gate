@@ -321,6 +321,31 @@ ALLOWED_USERS=0f8fad5b-d9cb-469f-a165-70867728950e,email:contractor@example.com,
 | `SESSION_COOKIE_NAME` | 否 | `cpa_session` | 会话 Cookie 名 |
 | `SESSION_TTL` | 否 | `604800` | 有效期（秒） |
 
+### 4.7 KeyCordon 隐私保护（可选）
+
+| 变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `KEYCORDON_ENABLED` | 否 | `false` | `true` 时 `/api/portal` 下发 `keycordon` 字段，页面渲染开关 |
+| `KEYCORDON_URL` | 启用时必填 | — | KeyCordon 的外部暴露地址；仅用于展示，服务端不连接它 |
+| `KEYCORDON_DEFAULT_ON` | 否 | `false` | 开关的首次默认状态；用户切换后以 `localStorage` 为准 |
+
+启动期校验：
+
+- `KEYCORDON_ENABLED` 为假时其余字段忽略，`url` 允许为空（基础镜像行为完全不变）。
+- 为真且 `KEYCORDON_URL` 为空 → 抛错退出。
+- `KEYCORDON_URL` 必须能被 `new URL()` 解析且协议为 `http:` / `https:`，否则抛错。
+- 末尾斜杠会被去掉，避免下发 `https://kc.example.com//v1`。
+- 回环地址（`localhost` / `127.0.0.1` / `::1`）只告警不阻止启动：客户端访问不到服务端视角的回环地址，但容器编排里可能出现自引用域名。
+
+`-keycordon` 镜像额外读取：
+
+| 变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `KEYCORDON_UPSTREAM` | 否 | `$CPA_MANAGEMENT_URL` | 打包进来的 keycordon 的上游地址 |
+| `KEYCORDON_MASTER_KEY` | 是 | — | hex 或 base64 的至少 32 字节；缺失时容器拒绝启动 |
+
+`KEYCORDON_URL`（外部，给浏览器）与 `KEYCORDON_UPSTREAM`（容器内，给 keycordon）是两个不同的东西，不可混用。
+
 ---
 
 ## 5. 用户身份与 Key 设计
@@ -555,6 +580,8 @@ Cookie: cpa_session=...
 }
 ```
 
+`/api/config` **不**下发 KeyCordon 字段：它带 `Cache-Control: public, max-age=3600`，把开关相关数据放进去会让配置变更延迟一小时才生效。KeyCordon 数据只出现在 `no-store` 的 `/api/portal` 里。
+
 `GET /api/auth/status` 响应（与兄弟项目一致）：
 
 ```json
@@ -615,6 +642,24 @@ Cookie: cpa_session=...
 - `endpoints.*.base` 是客户端环境变量该填的值；`endpoints.*.full` 是完整接口路径，仅用于页面「完整 URL」开关。
 - Anthropic 的 `base` 是站点根：Claude Code 自己追加 `/v1/messages`。
 - Gemini 的 `base` 是 `/v1beta`：Gemini CLI 自己追加 `/v1beta/models/...`。
+
+启用 KeyCordon 时额外下发（未启用时**整个字段省略**，不是 `null`）：
+
+```json
+{
+  "keycordon": {
+    "callUrl": "https://kc.example.com/v1",
+    "endpoints": {
+      "openai": { "base": "https://kc.example.com/v1", "full": "https://kc.example.com/v1/chat/completions" },
+      "anthropic": { "base": "https://kc.example.com", "full": "https://kc.example.com/v1/messages" },
+      "gemini": { "base": "https://kc.example.com/v1beta", "full": "https://kc.example.com/v1beta/models/{model}:generateContent" }
+    },
+    "defaultOn": false
+  }
+}
+```
+
+`keycordon.endpoints` 由同一个 `endpoints(base)` 函数以 `KEYCORDON_URL` 为根推导，路径规则与直连地址完全一致，不重复实现。
 
 失败场景：
 
@@ -741,6 +786,12 @@ Key 创建失败但用户资格正常时：
 - 未登录：同一位置显示一张简洁的登录卡片和登录按钮。
 - 已登录：只显示上述三块内容，不增加统计、图表、导航。
 - 「调用地址」区块右上角提供 **完整 URL** 开关：关闭（默认）显示客户端环境变量该填的基址，打开显示可直接调用的完整接口路径；状态保存在 `localStorage`（键 `cpa-full-url`），并作用于该区块内的所有地址。复制按钮复制当前显示的内容。
+- 启用 KeyCordon 时，**完整 URL** 左侧再多一个 **KeyCordon 隐私保护** 开关（`localStorage` 键 `cpa-keycordon`）：
+  - 三态：`true` / `false` / 未选择。未选择时采用服务端下发的 `defaultOn`；一旦用户切换过就以 `localStorage` 为准，环境变量只作首次默认值。
+  - 打开时三条调用地址与「快速配置」的 Deep Link 全部切换到 KeyCordon 地址；关闭时回到直连地址。
+  - 两个开关正交：地址元素同时保存「直连 / KeyCordon」×「基址 / 完整路径」四种组合（`data-base` / `data-full` / `data-kc-base` / `data-kc-full`），切换时只改文本、不重建 DOM。
+  - 两个开关在 ≤720px 时整组换到独立一行。
+  - 未启用集成时该开关不渲染，页面与未集成时完全一致。
 - 「快速配置」区块位于 API 密钥下方，提供常用的客户端一键配置入口：
   - **Cherry Studio**：`cherrystudio://providers/api-keys?v=1&data={urlSafeBase64(json)}`
   - **Chatbox**：`chatbox://provider/import?config={base64(json)}`
@@ -895,6 +946,12 @@ cpa-gate/
 ├── eslint.config.mjs
 ├── .env.example
 ├── Dockerfile
+├── Dockerfile.keycordon
+├── keycordon-integration/
+│   ├── config.yaml
+│   └── entrypoint.sh
+├── docs/
+│   └── keycordon-integration.md
 └── .gitlab-ci.yml
 ```
 
@@ -1225,6 +1282,25 @@ docker run -d --name cpa-gate -p 3001:3001 --env-file .env cpa-gate
 镜像同时发布在 GitLab 私有仓库 `registry.gitlab.soraharu.com/xiaoxi/cpa-gate:latest`。
 
 镜像内置 `CPA_MANAGEMENT_URL=http://127.0.0.1:8317` 作为默认值，跨容器部署时覆盖即可。
+
+#### `-keycordon` 镜像
+
+`latest-keycordon` 在同一个容器里同时运行 cpa-gate（3001）与 keycordon（8318）：
+
+```bash
+docker run -d --name cpa-gate \
+  -p 3001:3001 -p 127.0.0.1:8318:8318 --env-file .env \
+  -e KEYCORDON_ENABLED=true \
+  -e KEYCORDON_URL='https://kc.example.com' \
+  -e KEYCORDON_MASTER_KEY="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" \
+  docker.io/yanranxiaoxi/cpa-gate:latest-keycordon
+```
+
+- 入口是 `keycordon-integration/entrypoint.sh`，由 `tini -g` 作为 PID 1 托管；任一进程退出即整体退出（fail fast）。
+- 主密钥只从 `KEYCORDON_MASTER_KEY` 读取（`vault.master_key_scope: env`），容器内不落盘。
+- 上游取 `KEYCORDON_UPSTREAM`，未设置时回落到 `CPA_MANAGEMENT_URL`；指向 8318 自身时拒绝启动（防环）。
+- 二进制由 CI 从 keycordon 的软件包仓库取最新发布版本（排除 `nightly`）的 `linux_amd64` 静态二进制，因此构建**不可复现**；版本记录在 `org.opencontainers.image.keycordon.version` 标签上。
+- 8318 需要部署者自行暴露并配置证书；反向代理必须原样转发客户端凭据（keycordon 用它们划分 vault），并关闭响应缓冲（流式响应）。
 
 必需环境变量：
 

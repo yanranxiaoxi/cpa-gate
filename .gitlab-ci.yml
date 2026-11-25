@@ -59,6 +59,10 @@ docker-build:
     DOCKER_TLS_CERTDIR: ''
     CONTAINER_IMAGE_NAME: cpa-gate
     IMAGE_TAG: latest
+    # keycordon 软件包仓库（公开项目，可匿名读取）
+    KEYCORDON_PROJECT_ID: 168
+    KEYCORDON_PACKAGE_NAME: keycordon
+    KEYCORDON_IMAGE_TAG: latest-keycordon
   dependencies:
     - npm-build
   before_script:
@@ -73,3 +77,67 @@ docker-build:
     # GitLab 私有仓库
     - docker tag $CONTAINER_IMAGE_NAME:$IMAGE_TAG $CI_REGISTRY_IMAGE:$IMAGE_TAG
     - docker push $CI_REGISTRY_IMAGE:$IMAGE_TAG
+
+# #######################
+#   Docker (KeyCordon)  #
+# #######################
+
+# 在基础镜像之上打包 keycordon，产出 latest-keycordon。
+# keycordon 版本取软件包仓库里最新的发布版本（排除 nightly），因此构建不可复现；
+# 排障时从镜像的 LABEL org.opencontainers.image.keycordon.version 反查。
+docker-build-keycordon:
+  stage: docker
+  tags:
+    - linux
+    - docker
+    - amd64
+    - mpc
+  image: docker.io/library/docker:cli
+  services:
+    - name: docker.io/library/docker:dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ''
+  dependencies:
+    - npm-build
+  before_script:
+    # docker:cli 基于 alpine，默认不带 curl
+    - apk add --no-cache curl
+    - echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USER" --password-stdin docker.io
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+  script:
+    # 1. 取软件包仓库里最新的发布版本（排除 nightly，按语义化版本排序）
+    #    API 默认按创建时间排序，nightly 会排在最前，因此不能直接取第一条；
+    #    docker:cli 是 alpine，BusyBox 的 sort 没有 -V，这里用 awk 补零后排序
+    - |
+      set -eu
+      api="${CI_API_V4_URL}/projects/${KEYCORDON_PROJECT_ID}/packages"
+      ver=$(curl -sf "${api}?package_type=generic&per_page=100" \
+        | grep -o '"version":"[^"]*"' | cut -d'"' -f4 \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+        | awk -F. '{printf "%09d%09d%09d %s\n", $1, $2, $3, $0}' \
+        | sort | tail -1 | cut -d' ' -f2-)
+      [ -n "$ver" ] || { echo "软件包仓库里没有可用于打镜像的发布版本" >&2; exit 1; }
+      echo "keycordon version: $ver"
+      echo "KEYCORDON_VERSION=$ver" > build.env
+    # 2. 下载 linux/amd64 二进制到构建上下文（下载地址返回 302，必须 -L）
+    - |
+      set -eu
+      . ./build.env
+      base="${CI_API_V4_URL}/projects/${KEYCORDON_PROJECT_ID}/packages/generic/${KEYCORDON_PACKAGE_NAME}/${KEYCORDON_VERSION}"
+      curl -fL --retry 3 -o keycordon-integration/keycordon-linux-amd64 \
+        "${base}/keycordon_${KEYCORDON_VERSION}_linux_amd64"
+      chmod 0755 keycordon-integration/keycordon-linux-amd64
+    # 3. 构建、打标签、推送
+    - |
+      set -eu
+      . ./build.env
+      docker build --pull --provenance=false --sbom=false \
+        --build-arg KEYCORDON_VERSION="$KEYCORDON_VERSION" \
+        -f Dockerfile.keycordon \
+        -t "$CONTAINER_IMAGE_NAME:$KEYCORDON_IMAGE_TAG" .
+      docker tag "$CONTAINER_IMAGE_NAME:$KEYCORDON_IMAGE_TAG" "docker.io/$DOCKERHUB_USER/$CONTAINER_IMAGE_NAME:$KEYCORDON_IMAGE_TAG"
+      docker push "docker.io/$DOCKERHUB_USER/$CONTAINER_IMAGE_NAME:$KEYCORDON_IMAGE_TAG"
+      docker tag "$CONTAINER_IMAGE_NAME:$KEYCORDON_IMAGE_TAG" "$CI_REGISTRY_IMAGE:$KEYCORDON_IMAGE_TAG"
+      docker push "$CI_REGISTRY_IMAGE:$KEYCORDON_IMAGE_TAG"
