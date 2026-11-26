@@ -633,15 +633,22 @@ ENTRYPOINT ["/sbin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
 
 ### 5.1 新增变量
 
+变量必须写在 `docker-build-keycordon` **自己的** `variables:` 块里。写进别的 job（或误放在 `docker-build` 的块里）不会继承——GitLab 的 job 级 `variables` 只作用于该 job，`set -u` 下会直接报 `KEYCORDON_PROJECT_ID: parameter not set`。
+
 ```yaml
-variables:
-  CONTAINER_IMAGE_NAME: cpa-gate
-  IMAGE_TAG: latest
-  # keycordon 软件包仓库（公开项目，可匿名读取；已实测可取到版本列表与二进制）
-  KEYCORDON_PROJECT_ID: 168
-  KEYCORDON_PACKAGE_NAME: keycordon
-  KEYCORDON_IMAGE_TAG: latest-keycordon
+docker-build-keycordon:
+  # …stage / tags / image / services
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ''
+    CONTAINER_IMAGE_NAME: cpa-gate
+    # keycordon 软件包仓库（公开项目，可匿名读取；已实测可取到版本列表与二进制）
+    KEYCORDON_PROJECT_ID: 168
+    KEYCORDON_PACKAGE_NAME: keycordon
+    KEYCORDON_IMAGE_TAG: latest-keycordon
 ```
+
+`CONTAINER_IMAGE_NAME` 同样要在这个 job 里重复声明：`docker-build` 那份不会跨 job 继承。
 
 ### 5.2 新增 job
 
@@ -956,12 +963,13 @@ KEYCORDON_MASTER_KEY=
 
 ## 12. 实现记录
 
-已按第 10 节的顺序全部落地。实现过程中发现并修正了方案里两处会导致失败的细节：
+已按第 10 节的顺序全部落地。实现过程中发现并修正了方案里三处会导致失败的细节：
 
 | 项 | 方案原文 | 实际实现 | 原因 |
 | --- | --- | --- | --- |
 | 二进制忽略 | 写进 `.dockerignore` | 改写进 `.gitignore` | `.dockerignore` 会把文件从构建上下文剔除，`COPY keycordon-integration/keycordon-linux-amd64` 会直接报 `file not found in build context` |
 | 版本排序 | `sort -V` | `awk` 补零后 `sort` | CI 用的 `docker:cli` 基于 alpine，BusyBox 的 `sort` 没有 `-V` |
+| 变量位置 | 写在 `docker-build` 的 `variables:` 块 | 移进 `docker-build-keycordon` 自己的块 | GitLab 的 job 级变量不跨 job 继承，首次云端流水线因此报 `KEYCORDON_PROJECT_ID: parameter not set` |
 
 验收结果（全部实测）：
 
