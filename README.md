@@ -34,6 +34,7 @@ Users sign in through your existing SSO (OIDC, primarily Keycloak) and receive a
 - [Key format](#key-format)
 - [Security notes](#security-notes)
 - [Docker](#docker)
+- [Continuous integration](#continuous-integration)
 - [Development](#development)
 
 ## How it works
@@ -452,6 +453,46 @@ chmod 0755 keycordon-integration/keycordon-linux-amd64
 pnpm build
 docker build -f Dockerfile.keycordon --build-arg KEYCORDON_VERSION=<version> -t cpa-gate:keycordon .
 ```
+
+## Continuous integration
+
+The pipeline runs on the **default branch** only, and can be started in two ways:
+
+| Trigger | `CI_PIPELINE_SOURCE` | Notes |
+| --- | --- | --- |
+| Push to the default branch | `push` | The normal development flow |
+| Pipeline trigger token + API call | `trigger` | Rebuild without changing code, e.g. a new keycordon release or an updated base image |
+
+Merge requests, tag pushes, pushes to other branches, manual web runs and scheduled pipelines never create a pipeline, so they cannot trigger an image build or push.
+
+### Using a trigger token
+
+1. Open the project and go to **Settings → CI/CD → Pipeline trigger tokens**, click **Add new token**, then copy the token value.
+2. Pass it through an environment variable so the token does not end up in shell history or a process argument list:
+
+```bash
+export GITLAB_TRIGGER_TOKEN='…'
+
+curl --fail --request POST \
+  --form "token=$GITLAB_TRIGGER_TOKEN" \
+  --form ref=main \
+  "https://gitlab.soraharu.com/api/v4/projects/164/trigger/pipeline"
+```
+
+The parameters may also go in the query string (the token then appears in the process list and access logs, so this is only advisable in throwaway scripts):
+
+```bash
+curl --fail --request POST \
+  "https://gitlab.soraharu.com/api/v4/projects/164/trigger/pipeline?token=$GITLAB_TRIGGER_TOKEN"
+```
+
+Notes:
+
+- Only **POST** works; `GET` returns `404`.
+- `ref` must be the default branch name, otherwise `workflow:rules` rejects the pipeline and the API returns `400`.
+- The response body carries the new pipeline's `id`, `status` and `web_url`.
+- A trigger token grants maintainer-level access to the project, so treat it as a secret; revoke it under **Pipeline trigger tokens** as soon as it leaks (revocation cannot be undone).
+- The token can only create pipelines; it cannot read repository contents or CI/CD variables.
 
 ## Development
 

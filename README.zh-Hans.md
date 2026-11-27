@@ -33,6 +33,7 @@
 - [密钥格式](#密钥格式)
 - [安全说明](#安全说明)
 - [Docker](#docker)
+- [持续集成](#持续集成)
 - [开发](#开发)
 
 ## 工作原理
@@ -451,6 +452,46 @@ chmod 0755 keycordon-integration/keycordon-linux-amd64
 pnpm build
 docker build -f Dockerfile.keycordon --build-arg KEYCORDON_VERSION=<版本> -t cpa-gate:keycordon .
 ```
+
+## 持续集成
+
+流水线仅在**默认分支**上运行，两种触发方式：
+
+| 触发方式 | `CI_PIPELINE_SOURCE` | 说明 |
+| --- | --- | --- |
+| 向默认分支 push | `push` | 常规开发流程 |
+| 流水线触发令牌 + API 调用 | `trigger` | 不改代码也想重新构建一次，例如 keycordon 发布了新版本、基础镜像更新 |
+
+Merge Request、tag 推送、其它分支的 push、Web 手动运行与定时任务都不会创建流水线，因此不可能触发镜像构建与推送。
+
+### 使用触发令牌
+
+1. 在项目页面进入 **Settings → CI/CD → Pipeline trigger tokens**，点击 **Add new token**，创建后复制令牌值。
+2. 通过环境变量传给 curl，避免令牌进入 shell 历史或命令行参数：
+
+```bash
+export GITLAB_TRIGGER_TOKEN='…'
+
+curl --fail --request POST \
+  --form "token=$GITLAB_TRIGGER_TOKEN" \
+  --form ref=main \
+  "https://gitlab.soraharu.com/api/v4/projects/164/trigger/pipeline"
+```
+
+也可把参数放进查询串（令牌会出现在进程列表与访问日志中，仅建议在一次性脚本里使用）：
+
+```bash
+curl --fail --request POST \
+  "https://gitlab.soraharu.com/api/v4/projects/164/trigger/pipeline?token=$GITLAB_TRIGGER_TOKEN"
+```
+
+要点：
+
+- 只能用 **POST**，`GET` 会返回 `404`。
+- `ref` 必须是默认分支名，否则 `workflow:rules` 会拒绝创建流水线，接口返回 `400`。
+- 响应体包含新流水线的 `id`、`status` 与 `web_url`，可据此跟进。
+- 触发令牌等同项目维护者权限，应按机密管理：泄露后立即在 **Pipeline trigger tokens** 页面吊销（吊销不可撤销）。
+- 令牌只用于创建流水线，无法读取仓库内容或 CI 变量。
 
 ## 开发
 
